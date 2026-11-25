@@ -1,0 +1,34 @@
+pkgname=lightwm
+pkgver=0.1.0
+pkgrel=8
+pkgdesc="Out-of-the-box Wayland desktop environment built on River and Qt6 Quick"
+arch=('x86_64')
+url="https://github.com/fred/lightwm"
+license=('GPL-3.0-or-later')
+depends=(
+    'river'
+    'qt6-base'
+    'qt6-declarative'
+    'qt6-wayland'
+    'layer-shell-qt'
+    'wayland'
+    'libxkbcommon'
+    'libpulse'
+    'pam'
+    'grim'
+    'wl-clipboard'
+    'networkmanager'
+    'bluez'
+)
+makedepends=('cmake' 'ninja' 'wayland-protocols' 'river')
+
+build() {
+    cmake -B "$srcdir/build" -S "$startdir/.." -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX=/usr
+    cmake --build "$srcdir/build"
+}
+
+package() {
+    DESTDIR="$pkgdir" cmake --install "$srcdir/build"
+}

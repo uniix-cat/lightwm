@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/lightwm"
+mkdir -p "$STATE_DIR"
+
+# Work around river 0.5.2 Zig std.os.environ crash when display manager or wlroots unsets vars
+unset XDG_ACTIVATION_TOKEN XKB_DEFAULT_LAYOUT XKB_DEFAULT_VARIANT XKB_DEFAULT_MODEL XKB_DEFAULT_OPTIONS QT_WAYLAND_RECONNECT || true
+
+export XDG_CURRENT_DESKTOP="${XDG_CURRENT_DESKTOP:-lightwm}"
+export XDG_SESSION_TYPE="wayland"
+export XDG_SESSION_DESKTOP="lightwm"
+
+export QT_QPA_PLATFORM="wayland;xcb"
+export QT_WAYLAND_DISABLE_WINDOWDECORATION=1
+export MOZ_ENABLE_WAYLAND=1
+export ELECTRON_OZONE_PLATFORM_HINT=auto
+
+exec river -log-level info -c "lightwm-init" >"${STATE_DIR}/river.log" 2>&1

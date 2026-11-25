@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp}"
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/lightwm"
+mkdir -p "$STATE_DIR"
+
+INIT_LOG="${STATE_DIR}/init.log"
+WM_LOG="${STATE_DIR}/wm.log"
+SHELL_LOG="${STATE_DIR}/shell.log"
+SOCK_PATH="${RUNTIME_DIR}/lightwm-${WAYLAND_DISPLAY:-wayland-0}.sock"
+
+exec >"$INIT_LOG" 2>&1
+echo "[lightwm-init] starting at $(date -Is), WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-unset}, XDG_RUNTIME_DIR=${RUNTIME_DIR}"
+
+# Propagate Wayland environment so portals, D-Bus services, and apps find the session
+if command -v dbus-update-activation-environment >/dev/null 2>&1; then
+    dbus-update-activation-environment --systemd \
+        WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE XDG_SESSION_DESKTOP \
+        QT_QPA_PLATFORM || true
+fi
+
+# Start a polkit authentication agent if installed
+for agent in \
+    /usr/lib/polkit-kde-authentication-agent-1 \
+    /usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1 \
+    /usr/lib/lxqt-policykit-agent; do
+    if [ -x "$agent" ]; then
+        "$agent" &
+        break
+    fi
+done
+
+# Start the River window manager client first so it binds river_layer_shell_v1
+rm -f "$SOCK_PATH"
+lightwm-wm >"$WM_LOG" 2>&1 &
+WM_PID=$!
+
+# Wait until lightwm-wm has bound river protocols and opened the IPC socket
+for _ in $(seq 1 60); do
+    if [ -S "$SOCK_PATH" ]; then
+        echo "[lightwm-init] IPC socket ready at $SOCK_PATH"
+        break
+    fi
+    if ! kill -0 "$WM_PID" 2>/dev/null; then
+        echo "[lightwm-init] lightwm-wm exited early!"
+        exit 1
+    fi
+    sleep 0.05
+done
+
+# Start the LightWM shell (bar, wallpaper, launcher, notifications, tray, OSD, lockscreen)
+lightwm-shell >"$SHELL_LOG" 2>&1 &
+SHELL_PID=$!
+echo "[lightwm-init] started wm=$WM_PID shell=$SHELL_PID"
+
+wait "$WM_PID"
+WM_STATUS=$?
+echo "[lightwm-init] lightwm-wm exited with status $WM_STATUS"
+
+kill "$SHELL_PID" 2>/dev/null || true
+wait "$SHELL_PID" 2>/dev/null || true
+exit "$WM_STATUS"

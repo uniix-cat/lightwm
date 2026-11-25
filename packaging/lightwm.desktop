@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=LightWM
+Comment=Out-of-the-box Wayland desktop built on River
+Exec=lightwm-session
+Type=Application
+DesktopNames=lightwm
+Keywords=wayland;wm;tiling;river;

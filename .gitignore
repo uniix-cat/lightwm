@@ -1,0 +1,39 @@
+# Build & packaging artifacts
+build/
+.cache/
+compile_commands.json
+packaging/pkg/
+packaging/src/
+packaging/*.pkg.tar.zst
+packaging/*.pkg.tar.xz
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# AI Agents & Handoff
+agyc
+HANDOFF.md
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+COPILOT.md
+.antigravity/
+.agent/
+.agents/
+.gemini/
+.claude/
+.codex/
+.opencode/
+.cursor/
+.cursorrules
+.cursorignore
+.windsurf/
+.windsurfrules
+.clinerules
+.roo/
+.aider*
+.github/copilot-instructions.md
