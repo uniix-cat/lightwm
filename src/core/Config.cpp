@@ -51,6 +51,19 @@ ConfigData ConfigStore::load() {
     cfg.pointerSpeed = qBound(-1.0, root.value(QStringLiteral("pointerSpeed")).toDouble(cfg.pointerSpeed), 1.0);
 
     cfg.terminal = root.value(QStringLiteral("terminal")).toString(cfg.terminal);
+
+    const QJsonValue scalesVal = root.value(QStringLiteral("outputScales"));
+    if (scalesVal.isObject()) {
+        const QJsonObject scalesObj = scalesVal.toObject();
+        for (auto it = scalesObj.constBegin(); it != scalesObj.constEnd(); ++it) {
+            if (!it.key().isEmpty() && it.value().isDouble()) {
+                const double s = it.value().toDouble(1.0);
+                if (s > 0.0) {
+                    cfg.outputScales.insert(it.key(), qBound(0.5, s, 4.0));
+                }
+            }
+        }
+    }
     return cfg;
 }
 
@@ -80,6 +93,14 @@ bool ConfigStore::save(const ConfigData& cfg) {
     root.insert(QStringLiteral("pointerSpeed"), cfg.pointerSpeed);
 
     root.insert(QStringLiteral("terminal"), cfg.terminal);
+
+    QJsonObject scalesObj;
+    for (auto it = cfg.outputScales.constBegin(); it != cfg.outputScales.constEnd(); ++it) {
+        if (!it.key().isEmpty() && it.value() > 0.0) {
+            scalesObj.insert(it.key(), qBound(0.5, it.value(), 4.0));
+        }
+    }
+    root.insert(QStringLiteral("outputScales"), scalesObj);
 
     QFile file(path);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {

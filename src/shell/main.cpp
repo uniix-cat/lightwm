@@ -17,6 +17,7 @@
 #include <QQuickStyle>
 
 int main(int argc, char* argv[]) {
+    QGuiApplication::setHighDpiScaleFactorRoundingPolicy(Qt::HighDpiScaleFactorRoundingPolicy::PassThrough);
     QGuiApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("lightwm-shell"));
     app.setOrganizationName(QStringLiteral("LightWM"));

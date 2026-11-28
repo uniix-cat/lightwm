@@ -1,5 +1,6 @@
 #include "wm/WindowManager.hpp"
 
+#include "fractional-scale-v1-client-protocol.h"
 #include "river-input-management-v1-client-protocol.h"
 #include "river-layer-shell-v1-client-protocol.h"
 #include "river-libinput-config-v1-client-protocol.h"
@@ -9,6 +10,8 @@
 #include "river-xkb-bindings-v1-client-protocol.h"
 #undef new
 #include "river-xkb-config-v1-client-protocol.h"
+#include "viewporter-client-protocol.h"
+#include "wlr-output-management-unstable-v1-client-protocol.h"
 
 #include <QJsonArray>
 #include <QJsonObject>
@@ -612,21 +615,42 @@ static const river_pointer_binding_v1_listener kPtrBindingListener = {
     .released = ptrBindingReleased,
 };
 
+// ---------- Fractional Scale for Corner Overlays ----------
+
+static void cornerPreferredScale(void* data, wp_fractional_scale_v1*, uint32_t scale) {
+    auto* win = static_cast<WindowState*>(data);
+    if (win && scale > 0 && win->cornerScale120 != scale) {
+        win->cornerScale120 = scale;
+        if (win->wm) {
+            win->wm->scheduleManageDirty();
+        }
+    }
+}
+
+static const wp_fractional_scale_v1_listener kCornerScaleListener = {
+    .preferred_scale = cornerPreferredScale,
+};
+
 // ---------- WindowManager Implementation ----------
 
 WindowManager::WindowManager() = default;
 
 WindowManager::~WindowManager() {
     for (auto& win : m_windows) {
+        if (win->cornerFracScale) wp_fractional_scale_v1_destroy(win->cornerFracScale);
         for (int i = 0; i < 4; ++i) {
+            if (win->cornerViewport[i]) wp_viewport_destroy(win->cornerViewport[i]);
             if (win->cornerDec[i]) river_decoration_v1_destroy(win->cornerDec[i]);
             if (win->cornerSurf[i]) wl_surface_destroy(win->cornerSurf[i]);
         }
     }
     m_corners.destroyBuffers();
+    m_outputScaleMgr.reset();
     if (m_ipc) m_ipc->stop();
     if (m_activeKeymap) river_xkb_keymap_v1_destroy(m_activeKeymap);
     if (m_pendingKeymap) river_xkb_keymap_v1_destroy(m_pendingKeymap);
+    if (m_fractionalScaleMgr) wp_fractional_scale_manager_v1_destroy(m_fractionalScaleMgr);
+    if (m_viewporter) wp_viewporter_destroy(m_viewporter);
     if (m_layerShell) river_layer_shell_v1_destroy(m_layerShell);
     if (m_shm) wl_shm_destroy(m_shm);
     if (m_compositor) wl_compositor_destroy(m_compositor);
@@ -638,6 +662,9 @@ bool WindowManager::init(const std::string& ipcSocketPath) {
     m_config = ConfigStore::load();
     m_palette = paletteForName(m_config.themeName);
     m_xkbCtx = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+    m_outputScaleMgr = std::make_unique<OutputScaleManager>([this]() {
+        broadcastIpcState();
+    });
 
     m_display = wl_display_connect(nullptr);
     if (!m_display) {
@@ -653,6 +680,8 @@ bool WindowManager::init(const std::string& ipcSocketPath) {
         std::cerr << "[lightwm-wm] river_window_manager_v1 global not found\n";
         return false;
     }
+
+    m_outputScaleMgr->setDesiredScales(m_config.outputScales);
 
     m_ipc = std::make_unique<IpcServer>([this](const QJsonObject& cmd) {
         onActionIpcCommand(cmd);
@@ -690,6 +719,14 @@ void WindowManager::onRegistryGlobal(uint32_t name, const char* iface, uint32_t 
     } else if (nameStr == wl_shm_interface.name) {
         m_shm = static_cast<wl_shm*>(
             wl_registry_bind(m_registry, name, &wl_shm_interface, 1u));
+    } else if (nameStr == wp_viewporter_interface.name) {
+        m_viewporter = static_cast<wp_viewporter*>(
+            wl_registry_bind(m_registry, name, &wp_viewporter_interface, 1u));
+    } else if (nameStr == wp_fractional_scale_manager_v1_interface.name) {
+        m_fractionalScaleMgr = static_cast<wp_fractional_scale_manager_v1*>(
+            wl_registry_bind(m_registry, name, &wp_fractional_scale_manager_v1_interface, 1u));
+    } else if (nameStr == zwlr_output_manager_v1_interface.name && m_outputScaleMgr) {
+        m_outputScaleMgr->bind(m_registry, name, version);
     } else if (nameStr == river_window_manager_v1_interface.name) {
         m_wm = static_cast<river_window_manager_v1*>(
             wl_registry_bind(m_registry, name, &river_window_manager_v1_interface, std::min(version, 6u)));
@@ -777,6 +814,7 @@ int WindowManager::run() {
 
 void WindowManager::onNewWindow(river_window_v1* wlWin) {
     auto win = std::make_unique<WindowState>();
+    win->wm = this;
     win->id = m_nextId++;
     win->wl = wlWin;
     win->node = river_window_v1_get_node(wlWin);
@@ -903,7 +941,15 @@ void WindowManager::onWindowClosed(WindowState* win) {
     if (m_focusedWindowId == win->id) {
         m_focusedWindowId = 0;
     }
+    if (win->cornerFracScale) {
+        wp_fractional_scale_v1_destroy(win->cornerFracScale);
+        win->cornerFracScale = nullptr;
+    }
     for (int i = 0; i < 4; ++i) {
+        if (win->cornerViewport[i]) {
+            wp_viewport_destroy(win->cornerViewport[i]);
+            win->cornerViewport[i] = nullptr;
+        }
         if (win->cornerDec[i]) {
             river_decoration_v1_destroy(win->cornerDec[i]);
             win->cornerDec[i] = nullptr;
@@ -1257,9 +1303,12 @@ void WindowManager::onRenderStart() {
                         {-bw, h + bw - S},
                         {w + bw - S, h + bw - S},
                     };
+                    const uint32_t scale120 = win->cornerScale120 ? win->cornerScale120 : 120u;
+                    const int P = m_corners.pixelSize(scale120);
                     const bool needsCommit = !win->cornerMapped ||
                                              win->cornerActive != isFocused ||
-                                             win->cornerVersion != m_corners.version();
+                                             win->cornerVersion != m_corners.version() ||
+                                             win->cornerLastScale120 != scale120;
 
                     for (int i = 0; i < 4; ++i) {
                         if (!win->cornerSurf[i]) {
@@ -1267,14 +1316,27 @@ void WindowManager::onRenderStart() {
                             if (win->cornerSurf[i]) {
                                 win->cornerDec[i] = river_window_v1_get_decoration_above(
                                     win->wl, win->cornerSurf[i]);
+                                if (m_viewporter) {
+                                    win->cornerViewport[i] = wp_viewporter_get_viewport(
+                                        m_viewporter, win->cornerSurf[i]);
+                                }
+                                if (i == 0 && m_fractionalScaleMgr) {
+                                    win->cornerFracScale = wp_fractional_scale_manager_v1_get_fractional_scale(
+                                        m_fractionalScaleMgr, win->cornerSurf[0]);
+                                    wp_fractional_scale_v1_add_listener(
+                                        win->cornerFracScale, &kCornerScaleListener, win.get());
+                                }
                             }
                         }
                         if (!win->cornerDec[i] || !win->cornerSurf[i]) continue;
 
                         river_decoration_v1_set_offset(win->cornerDec[i], offsets[i][0], offsets[i][1]);
                         if (needsCommit) {
-                            wl_surface_attach(win->cornerSurf[i], m_corners.buffer(isFocused, i), 0, 0);
-                            wl_surface_damage_buffer(win->cornerSurf[i], 0, 0, S, S);
+                            if (win->cornerViewport[i]) {
+                                wp_viewport_set_destination(win->cornerViewport[i], S, S);
+                            }
+                            wl_surface_attach(win->cornerSurf[i], m_corners.buffer(isFocused, i, scale120), 0, 0);
+                            wl_surface_damage_buffer(win->cornerSurf[i], 0, 0, P, P);
                             river_decoration_v1_sync_next_commit(win->cornerDec[i]);
                             wl_surface_commit(win->cornerSurf[i]);
                         }
@@ -1282,9 +1344,13 @@ void WindowManager::onRenderStart() {
                     win->cornerMapped = true;
                     win->cornerActive = isFocused;
                     win->cornerVersion = m_corners.version();
+                    win->cornerLastScale120 = scale120;
                 } else if (win->cornerMapped) {
                     for (int i = 0; i < 4; ++i) {
                         if (win->cornerDec[i] && win->cornerSurf[i]) {
+                            if (win->cornerViewport[i]) {
+                                wp_viewport_set_destination(win->cornerViewport[i], -1, -1);
+                            }
                             wl_surface_attach(win->cornerSurf[i], nullptr, 0, 0);
                             river_decoration_v1_sync_next_commit(win->cornerDec[i]);
                             wl_surface_commit(win->cornerSurf[i]);
@@ -1523,6 +1589,9 @@ void WindowManager::reloadConfig() {
     m_config = ConfigStore::load();
     m_palette = paletteForName(m_config.themeName);
     m_corners.rebuild(m_config.cornerRadius, m_config.borderWidth, m_palette);
+    if (m_outputScaleMgr) {
+        m_outputScaleMgr->setDesiredScales(m_config.outputScales);
+    }
     if (m_xkbConfig) {
         rebuildAndPushXkbKeymap();
     }
@@ -1654,6 +1723,9 @@ void WindowManager::broadcastIpcState() {
     state.insert(QStringLiteral("activeTitle"), foc ? QString::fromStdString(foc->title) : QString());
     state.insert(QStringLiteral("activeAppId"), foc ? QString::fromStdString(foc->appId) : QString());
     state.insert(QStringLiteral("isFloating"), foc ? foc->floating : false);
+    if (m_outputScaleMgr) {
+        state.insert(QStringLiteral("outputs"), m_outputScaleMgr->outputsJson());
+    }
 
     m_ipc->broadcastState(state);
 }

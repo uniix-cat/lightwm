@@ -5,6 +5,7 @@
 #include "wm/CornerDecorations.hpp"
 #include "wm/IpcServer.hpp"
 #include "wm/LayoutEngine.hpp"
+#include "wm/OutputScaleManager.hpp"
 #include "wm/TouchpadGestures.hpp"
 
 #include <QJsonObject>
@@ -20,6 +21,10 @@ struct wl_display;
 struct wl_registry;
 struct wl_shm;
 struct wl_surface;
+struct wp_fractional_scale_manager_v1;
+struct wp_fractional_scale_v1;
+struct wp_viewporter;
+struct wp_viewport;
 struct xkb_context;
 
 struct river_decoration_v1;
@@ -64,6 +69,7 @@ struct OutputState {
 };
 
 struct WindowState {
+    struct WindowManager* wm = nullptr;
     uint64_t id = 0;
     river_window_v1* wl = nullptr;
     river_node_v1* node = nullptr;
@@ -96,6 +102,10 @@ struct WindowState {
     // Rounded corner overlays via river_decoration_v1
     wl_surface* cornerSurf[4]{};
     river_decoration_v1* cornerDec[4]{};
+    wp_viewport* cornerViewport[4]{};
+    wp_fractional_scale_v1* cornerFracScale = nullptr;
+    uint32_t cornerScale120 = 120;
+    uint32_t cornerLastScale120 = 0;
     bool cornerMapped = false;
     bool cornerActive = false;
     uint64_t cornerVersion = 0;
@@ -263,6 +273,8 @@ private:
     wl_registry* m_registry = nullptr;
     wl_compositor* m_compositor = nullptr;
     wl_shm* m_shm = nullptr;
+    wp_viewporter* m_viewporter = nullptr;
+    wp_fractional_scale_manager_v1* m_fractionalScaleMgr = nullptr;
     xkb_context* m_xkbCtx = nullptr;
 
     river_window_manager_v1* m_wm = nullptr;
@@ -296,6 +308,7 @@ private:
 
     std::unique_ptr<IpcServer> m_ipc;
     std::unique_ptr<TouchpadGestures> m_gestures;
+    std::unique_ptr<OutputScaleManager> m_outputScaleMgr;
     CornerDecorations m_corners;
     int m_gestureRetryCount = 0;
     std::chrono::steady_clock::time_point m_lastAnimStep{};

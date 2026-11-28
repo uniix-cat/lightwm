@@ -335,44 +335,169 @@ ApplicationWindow {
                     Item { Layout.fillHeight: true }
                 }
 
-                // 3: Displays (multi-monitor foundation)
+                // 3: Displays & Fractional Scaling
                 ColumnLayout {
                     spacing: 12
                     Text {
-                        text: "Displays (Multi-Monitor Foundation)"
+                        text: "Displays & Fractional Scaling"
                         font.family: Theme.fontFamily
                         font.pixelSize: 18
                         font.bold: true
                         color: Theme.textPrimary
                     }
-                    Repeater {
-                        model: Settings.displays
-                        delegate: Rectangle {
-                            required property var modelData
-                            Layout.fillWidth: true
-                            height: 56
-                            radius: Theme.radius - 2
-                            color: Theme.surfaceElevated
-                            border.width: 1
-                            border.color: Theme.borderInactive
+                    ScrollView {
+                        id: displaysScroll
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        clip: true
 
-                            ColumnLayout {
-                                anchors.fill: parent
-                                anchors.margins: 10
-                                Text {
-                                    text: modelData.name + " — " + modelData.width + "x" + modelData.height + " @ " + modelData.refresh + " Hz"
-                                    font.bold: true
-                                    color: Theme.textPrimary
-                                }
-                                Text {
-                                    text: "Scale: " + modelData.scale + "x (wlr-output-management config UI planned)"
-                                    font.pixelSize: 11
-                                    color: Theme.textSecondary
+                        ColumnLayout {
+                            width: displaysScroll.availableWidth
+                            spacing: 12
+
+                            Repeater {
+                                model: Settings.displays
+                                delegate: Rectangle {
+                                    id: displayCard
+                                    required property var modelData
+                                    property double liveScale: modelData.configuredScale !== undefined ? modelData.configuredScale : modelData.scale
+                                    property double pendingScale: liveScale
+                                    onLiveScaleChanged: {
+                                        if (!scaleSlider.pressed) {
+                                            pendingScale = liveScale
+                                        }
+                                    }
+
+                                    Layout.fillWidth: true
+                                    implicitHeight: cardLayout.implicitHeight + 24
+                                    radius: Theme.radius - 2
+                                    color: Theme.surfaceElevated
+                                    border.width: 1
+                                    border.color: Theme.borderInactive
+
+                                    ColumnLayout {
+                                        id: cardLayout
+                                        anchors.fill: parent
+                                        anchors.margins: 12
+                                        spacing: 10
+
+                                        RowLayout {
+                                            Layout.fillWidth: true
+                                            Text {
+                                                text: displayCard.modelData.name + " — " + displayCard.modelData.width + "×" + displayCard.modelData.height + " @ " + displayCard.modelData.refresh + " Hz"
+                                                font.family: Theme.fontFamily
+                                                font.bold: true
+                                                font.pixelSize: 14
+                                                color: Theme.textPrimary
+                                                Layout.fillWidth: true
+                                            }
+                                            Text {
+                                                text: Math.round(displayCard.pendingScale * 100) + "% (" + displayCard.pendingScale.toFixed(2) + "x)"
+                                                font.family: Theme.fontFamily
+                                                font.bold: true
+                                                font.pixelSize: 13
+                                                color: Theme.accentStrong
+                                            }
+                                        }
+
+                                        Text {
+                                            text: (displayCard.modelData.description && displayCard.modelData.description.length > 0
+                                                   ? displayCard.modelData.description + "  •  "
+                                                   : "")
+                                                  + "Logical: " + displayCard.modelData.logicalWidth + "×" + displayCard.modelData.logicalHeight
+                                                  + "  •  Active: " + Number(displayCard.modelData.scale).toFixed(2) + "x"
+                                            font.family: Theme.fontFamily
+                                            font.pixelSize: 11
+                                            color: Theme.textSecondary
+                                            elide: Text.ElideRight
+                                            Layout.fillWidth: true
+                                        }
+
+                                        RowLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 6
+
+                                            Text {
+                                                text: "Presets:"
+                                                font.family: Theme.fontFamily
+                                                font.pixelSize: 12
+                                                color: Theme.textSecondary
+                                            }
+
+                                            Repeater {
+                                                model: [0.75, 1.0, 1.25, 1.5, 1.75, 2.0]
+                                                delegate: Rectangle {
+                                                    required property double modelData
+                                                    readonly property bool isCurrent: Math.abs(displayCard.liveScale - modelData) < 0.01
+                                                    width: presetLabel.implicitWidth + 16
+                                                    height: 26
+                                                    radius: Theme.radius - 4
+                                                    color: isCurrent ? Theme.accent : Theme.surface
+                                                    border.width: 1
+                                                    border.color: isCurrent ? Theme.accentStrong : Theme.borderInactive
+
+                                                    Text {
+                                                        id: presetLabel
+                                                        anchors.centerIn: parent
+                                                        text: Math.round(modelData * 100) + "%"
+                                                        font.family: Theme.fontFamily
+                                                        font.pixelSize: 11
+                                                        font.weight: isCurrent ? Font.DemiBold : Font.Normal
+                                                        color: isCurrent ? Theme.textOnAccent : Theme.textPrimary
+                                                    }
+
+                                                    MouseArea {
+                                                        anchors.fill: parent
+                                                        cursorShape: Qt.PointingHandCursor
+                                                        onClicked: {
+                                                            displayCard.pendingScale = modelData
+                                                            Settings.setOutputScale(displayCard.modelData.name, modelData)
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        RowLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 12
+
+                                            Text {
+                                                text: "Custom Scale:"
+                                                font.family: Theme.fontFamily
+                                                font.pixelSize: 12
+                                                color: Theme.textPrimary
+                                            }
+
+                                            Slider {
+                                                id: scaleSlider
+                                                Layout.fillWidth: true
+                                                from: 0.5
+                                                to: 3.0
+                                                stepSize: 0.05
+                                                value: displayCard.liveScale
+                                                onMoved: {
+                                                    displayCard.pendingScale = Math.round(value * 20) / 20
+                                                    if (!pressed) {
+                                                        Settings.setOutputScale(displayCard.modelData.name, displayCard.pendingScale)
+                                                    }
+                                                }
+                                                onPressedChanged: {
+                                                    if (!pressed) {
+                                                        const target = Math.round(value * 20) / 20
+                                                        displayCard.pendingScale = target
+                                                        if (Math.abs(target - displayCard.liveScale) >= 0.01) {
+                                                            Settings.setOutputScale(displayCard.modelData.name, target)
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
-                    Item { Layout.fillHeight: true }
                 }
 
                 // 4: Default Keybindings Reference

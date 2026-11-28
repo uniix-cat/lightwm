@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QMap>
 #include <QString>
 #include <QStringList>
 
@@ -31,6 +32,9 @@ struct ConfigData {
 
     // Applications
     QString terminal = QStringLiteral("foot");
+
+    // Displays (per-output fractional scale, keyed by output name e.g. "eDP-1")
+    QMap<QString, double> outputScales;
 };
 
 class ConfigStore {

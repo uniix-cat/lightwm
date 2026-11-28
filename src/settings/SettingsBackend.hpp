@@ -1,7 +1,9 @@
 #pragma once
 
 #include "core/Config.hpp"
+#include <QLocalSocket>
 #include <QObject>
+#include <QTimer>
 #include <QUrl>
 #include <QVariantList>
 
@@ -23,7 +25,7 @@ class SettingsBackend : public QObject {
     Q_PROPERTY(QString terminal READ terminal WRITE setTerminal NOTIFY changed)
     Q_PROPERTY(QString wallpaperPath READ wallpaperPath WRITE setWallpaperPath NOTIFY changed)
     Q_PROPERTY(QString wallpaperMode READ wallpaperMode WRITE setWallpaperMode NOTIFY changed)
-    Q_PROPERTY(QVariantList displays READ displays CONSTANT)
+    Q_PROPERTY(QVariantList displays READ displays NOTIFY displaysChanged)
 
 public:
     explicit SettingsBackend(QObject* parent = nullptr);
@@ -71,17 +73,27 @@ public:
     void setWallpaperMode(const QString& v) { m_cfg.wallpaperMode = v; applyAndSave(); }
 
     Q_INVOKABLE void setWallpaperFromUrl(const QUrl& url);
+    Q_INVOKABLE void setOutputScale(const QString& outputName, double scale);
 
     QVariantList displays() const;
 
 signals:
     void changed();
+    void displaysChanged();
+
+private slots:
+    void tryConnectIpc();
+    void onIpcReadyRead();
 
 private:
     void applyAndSave();
     void notifyWmReload();
 
     ConfigData m_cfg;
+    QLocalSocket m_ipcSocket;
+    QTimer m_reconnectTimer;
+    QByteArray m_ipcBuffer;
+    QVariantList m_ipcOutputs;
 };
 
 } // namespace lightwm::settings

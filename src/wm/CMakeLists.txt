@@ -10,6 +10,8 @@ add_executable(lightwm-wm
     TouchpadGestures.cpp
     CornerDecorations.hpp
     CornerDecorations.cpp
+    OutputScaleManager.hpp
+    OutputScaleManager.cpp
 )
 
 target_link_libraries(lightwm-wm PRIVATE

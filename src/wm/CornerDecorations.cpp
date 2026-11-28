@@ -43,43 +43,73 @@ void CornerDecorations::init(wl_compositor* compositor, wl_shm* shm) {
 }
 
 void CornerDecorations::destroyBuffers() {
-    for (int s = 0; s < 2; ++s) {
-        for (int c = 0; c < 4; ++c) {
-            if (m_buffers[s][c]) {
-                wl_buffer_destroy(m_buffers[s][c]);
-                m_buffers[s][c] = nullptr;
+    for (auto& [scale120, entry] : m_scaleCache) {
+        (void)scale120;
+        for (int s = 0; s < 2; ++s) {
+            for (int c = 0; c < 4; ++c) {
+                if (entry.buffers[s][c]) {
+                    wl_buffer_destroy(entry.buffers[s][c]);
+                    entry.buffers[s][c] = nullptr;
+                }
             }
         }
     }
+    m_scaleCache.clear();
     m_size = 0;
 }
 
 void CornerDecorations::rebuild(int radius, int borderWidth, const ThemePalette& palette) {
     destroyBuffers();
     m_borderWidth = std::max(0, borderWidth);
-    const int r = std::clamp(radius, 0, 24);
-    if (!m_compositor || !m_shm || r <= 0) {
+    m_radius = std::clamp(radius, 0, 24);
+    m_palette = palette;
+    if (!m_compositor || !m_shm || m_radius <= 0) {
         ++m_version;
         return;
     }
 
-    m_size = r + m_borderWidth;
-    for (int c = 0; c < 4; ++c) {
-        m_buffers[0][c] = createCornerBuffer(c, r, m_borderWidth, palette.borderInactive, palette.background);
-        m_buffers[1][c] = createCornerBuffer(c, r, m_borderWidth, palette.borderActive, palette.background);
-    }
+    m_size = m_radius + m_borderWidth;
+    (void)ensureScale(120);
     ++m_version;
+}
+
+int CornerDecorations::pixelSize(uint32_t scale120) const {
+    if (m_size <= 0) return 0;
+    const uint32_t clamped = std::clamp(scale120 ? scale120 : 120u, 60u, 480u);
+    const double scale = static_cast<double>(clamped) / 120.0;
+    return std::max(1, static_cast<int>(std::lround(static_cast<double>(m_size) * scale)));
+}
+
+const CornerDecorations::ScaleBuffers& CornerDecorations::ensureScale(uint32_t scale120) const {
+    const uint32_t clamped = std::clamp(scale120 ? scale120 : 120u, 60u, 480u);
+    auto it = m_scaleCache.find(clamped);
+    if (it != m_scaleCache.end()) {
+        return it->second;
+    }
+
+    ScaleBuffers sb;
+    sb.pixelSize = pixelSize(clamped);
+    if (m_compositor && m_shm && m_radius > 0 && sb.pixelSize > 0) {
+        for (int c = 0; c < 4; ++c) {
+            sb.buffers[0][c] = createCornerBuffer(c, m_radius, m_borderWidth, sb.pixelSize, m_palette.borderInactive, m_palette.background);
+            sb.buffers[1][c] = createCornerBuffer(c, m_radius, m_borderWidth, sb.pixelSize, m_palette.borderActive, m_palette.background);
+        }
+    }
+    auto [inserted, _] = m_scaleCache.emplace(clamped, sb);
+    return inserted->second;
 }
 
 wl_buffer* CornerDecorations::createCornerBuffer(
     int cornerIndex,
     int radius,
     int borderWidth,
+    int pixelSize,
     const QColor& borderCol,
-    const QColor& outerMaskCol) {
-    const int S = radius + borderWidth;
-    const size_t stride = static_cast<size_t>(S) * 4;
-    const size_t byteSize = stride * static_cast<size_t>(S);
+    const QColor& outerMaskCol) const {
+    const int logicalS = radius + borderWidth;
+    const int P = pixelSize;
+    const size_t stride = static_cast<size_t>(P) * 4;
+    const size_t byteSize = stride * static_cast<size_t>(P);
 
     const int fd = createShmFile(byteSize);
     if (fd < 0) return nullptr;
@@ -92,12 +122,13 @@ wl_buffer* CornerDecorations::createCornerBuffer(
 
     auto* pixels = static_cast<uint32_t*>(mem);
 
-    // Inner arc center in patch coordinates
-    const double cx = (cornerIndex == 0 || cornerIndex == 2) ? static_cast<double>(S) : 0.0;
-    const double cy = (cornerIndex == 0 || cornerIndex == 1) ? static_cast<double>(S) : 0.0;
+    // Inner arc center in buffer pixel coordinates
+    const double cx = (cornerIndex == 0 || cornerIndex == 2) ? static_cast<double>(P) : 0.0;
+    const double cy = (cornerIndex == 0 || cornerIndex == 1) ? static_cast<double>(P) : 0.0;
 
-    const double rIn = static_cast<double>(radius);
-    const double rOut = static_cast<double>(radius + borderWidth);
+    const double effScale = (logicalS > 0) ? (static_cast<double>(P) / static_cast<double>(logicalS)) : 1.0;
+    const double rIn = static_cast<double>(radius) * effScale;
+    const double rOut = static_cast<double>(logicalS) * effScale;
 
     const double br = borderCol.redF();
     const double bg = borderCol.greenF();
@@ -107,8 +138,8 @@ wl_buffer* CornerDecorations::createCornerBuffer(
     const double mg = outerMaskCol.greenF();
     const double mb = outerMaskCol.blueF();
 
-    for (int y = 0; y < S; ++y) {
-        for (int x = 0; x < S; ++x) {
+    for (int y = 0; y < P; ++y) {
+        for (int x = 0; x < P; ++x) {
             const double dx = (x + 0.5) - cx;
             const double dy = (y + 0.5) - cy;
             const double d = std::hypot(dx, dy);
@@ -140,7 +171,7 @@ wl_buffer* CornerDecorations::createCornerBuffer(
                 px = premulArgb(1.0, mr, mg, mb);
             }
 
-            pixels[y * S + x] = px;
+            pixels[y * P + x] = px;
         }
     }
 
@@ -148,7 +179,7 @@ wl_buffer* CornerDecorations::createCornerBuffer(
 
     wl_shm_pool* pool = wl_shm_create_pool(m_shm, fd, static_cast<int32_t>(byteSize));
     wl_buffer* buf = wl_shm_pool_create_buffer(
-        pool, 0, S, S, static_cast<int32_t>(stride), WL_SHM_FORMAT_ARGB8888);
+        pool, 0, P, P, static_cast<int32_t>(stride), WL_SHM_FORMAT_ARGB8888);
     wl_shm_pool_destroy(pool);
     ::close(fd);
     return buf;
@@ -166,9 +197,10 @@ wl_surface* CornerDecorations::createClickThroughSurface() const {
     return surf;
 }
 
-wl_buffer* CornerDecorations::buffer(bool active, int cornerIndex) const {
-    if (cornerIndex < 0 || cornerIndex >= 4) return nullptr;
-    return m_buffers[active ? 1 : 0][cornerIndex];
+wl_buffer* CornerDecorations::buffer(bool active, int cornerIndex, uint32_t scale120) const {
+    if (cornerIndex < 0 || cornerIndex >= 4 || !isReady()) return nullptr;
+    const ScaleBuffers& sb = ensureScale(scale120);
+    return sb.buffers[active ? 1 : 0][cornerIndex];
 }
 
 } // namespace lightwm::wm
