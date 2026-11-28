@@ -177,6 +177,7 @@ public:
     void onNewLibinputDevice(river_libinput_device_v1* dev);
 
     void onWindowClosed(WindowState* win);
+    void onWindowFullscreenRequested(WindowState* win, river_output_v1* output);
     void onOutputRemoved(OutputState* out);
     void onSeatRemoved(SeatState* seat);
 

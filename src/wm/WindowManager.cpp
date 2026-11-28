@@ -205,10 +205,9 @@ static void winShowWindowMenu(void*, river_window_v1*, int32_t, int32_t) {}
 static void winMaximizeRequested(void*, river_window_v1*) {}
 static void winUnmaximizeRequested(void*, river_window_v1*) {}
 
-static void winFullscreenRequested(void* data, river_window_v1*, river_output_v1*) {
+static void winFullscreenRequested(void* data, river_window_v1*, river_output_v1* output) {
     auto* hook = static_cast<WindowHook*>(data);
-    hook->win->fullscreen = true;
-    hook->wm->scheduleManageDirty();
+    hook->wm->onWindowFullscreenRequested(hook->win, output);
 }
 
 static void winExitFullscreenRequested(void* data, river_window_v1*) {
@@ -1167,9 +1166,11 @@ void WindowManager::onManageStart() {
 
             if (win->fullscreen) {
                 river_window_v1_fullscreen(win->wl, out->wl);
+                river_window_v1_inform_fullscreen(win->wl);
                 river_window_v1_set_tiled(win->wl, 0);
             } else {
                 river_window_v1_exit_fullscreen(win->wl);
+                river_window_v1_inform_not_fullscreen(win->wl);
                 if (win->floating) {
                     river_window_v1_set_tiled(win->wl, 0);
                     if (!win->floatInitialized) {
@@ -1276,7 +1277,7 @@ void WindowManager::onRenderStart() {
                 }
 
                 river_node_v1_set_position(win->node, drawX, drawY);
-                if (wantFloating) {
+                if (wantFloating || win->fullscreen) {
                     river_node_v1_place_top(win->node);
                 }
 
@@ -1363,7 +1364,7 @@ void WindowManager::onRenderStart() {
     }
 
     if (auto* focused = focusedWindow()) {
-        if (focused->floating) {
+        if (focused->floating || focused->fullscreen) {
             river_node_v1_place_top(focused->node);
         }
     }
@@ -1467,9 +1468,27 @@ void WindowManager::onActionToggleFloatFocused() {
     }
 }
 
+void WindowManager::onWindowFullscreenRequested(WindowState* win, river_output_v1* output) {
+    if (!win) return;
+    if (output) {
+        for (auto& out : m_outputs) {
+            if (out->wl == output) {
+                win->outputId = out->id;
+                break;
+            }
+        }
+    }
+    win->fullscreen = true;
+    win->animActive = false;
+    scheduleManageDirty();
+}
+
 void WindowManager::onActionToggleFullscreenFocused() {
     if (auto* win = focusedWindow()) {
         win->fullscreen = !win->fullscreen;
+        if (win->fullscreen) {
+            win->animActive = false;
+        }
         scheduleManageDirty();
     }
 }
