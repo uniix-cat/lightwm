@@ -49,6 +49,11 @@ Window {
         radius: Theme.radius
         border.width: 2
         border.color: Theme.borderActive
+        readonly property var activeScr: Qt.application.screens.length > 0 ? Qt.application.screens[0] : null
+        backdropScreenName: activeScr ? activeScr.name : ""
+        screenWidth: activeScr ? activeScr.width : 1920
+        screenHeight: activeScr ? activeScr.height : 1080
+        backdropRect: Qt.rect((screenWidth - root.width) / 2, (screenHeight - root.height) / 2, root.width, root.height)
 
         ColumnLayout {
             anchors.fill: parent

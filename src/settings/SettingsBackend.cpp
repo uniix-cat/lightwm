@@ -8,6 +8,7 @@
 #include <QJsonObject>
 #include <QLocalSocket>
 #include <QScreen>
+#include <QStandardPaths>
 #include <QVariantMap>
 #include <cmath>
 
@@ -113,6 +114,202 @@ void SettingsBackend::refreshToolkitThemes() {
     m_qtStyles = QStringList{QString()} + ToolkitTheme::availableQtStyles();
     m_qtPlatformThemes = ToolkitTheme::availableQtPlatformThemes();
     emit toolkitListsChanged();
+}
+
+QStringList SettingsBackend::availableTerminals() const {
+    const QStringList candidates = {
+        QStringLiteral("kitty"),
+        QStringLiteral("foot"),
+        QStringLiteral("alacritty"),
+        QStringLiteral("wezterm"),
+        QStringLiteral("ghostty"),
+        QStringLiteral("konsole"),
+        QStringLiteral("gnome-terminal"),
+        QStringLiteral("xfce4-terminal"),
+        QStringLiteral("xterm"),
+        QStringLiteral("st"),
+        QStringLiteral("urxvt"),
+        QStringLiteral("tilix"),
+    };
+    QStringList found;
+    if (!m_cfg.terminal.isEmpty()) {
+        found.append(m_cfg.terminal);
+    }
+    for (const QString& name : candidates) {
+        if (!found.contains(name) && !QStandardPaths::findExecutable(name).isEmpty()) {
+            found.append(name);
+        }
+    }
+    return found;
+}
+
+namespace {
+
+QString labelForShortcutAction(const QString& action, const QString& command) {
+    if (action == QStringLiteral("spawn_terminal")) return QStringLiteral("Open Terminal");
+    if (action == QStringLiteral("toggle_launcher")) return QStringLiteral("Toggle App Launcher");
+    if (action == QStringLiteral("close_focused")) return QStringLiteral("Close Focused Window");
+    if (action == QStringLiteral("toggle_float")) return QStringLiteral("Toggle Floating Mode");
+    if (action == QStringLiteral("toggle_fullscreen")) return QStringLiteral("Toggle Fullscreen");
+    if (action == QStringLiteral("focus_left")) return QStringLiteral("Focus Window Left");
+    if (action == QStringLiteral("focus_down")) return QStringLiteral("Focus Window Down");
+    if (action == QStringLiteral("focus_up")) return QStringLiteral("Focus Window Up");
+    if (action == QStringLiteral("focus_right")) return QStringLiteral("Focus Window Right");
+    if (action == QStringLiteral("lock_screen")) return QStringLiteral("Lock Screen");
+    if (action == QStringLiteral("screenshot")) return QStringLiteral("Screenshot");
+    if (action == QStringLiteral("audio_raise")) return QStringLiteral("Volume Up");
+    if (action == QStringLiteral("audio_lower")) return QStringLiteral("Volume Down");
+    if (action == QStringLiteral("audio_mute")) return QStringLiteral("Volume Mute");
+    if (action == QStringLiteral("brightness_up")) return QStringLiteral("Brightness Up");
+    if (action == QStringLiteral("brightness_down")) return QStringLiteral("Brightness Down");
+    return QStringLiteral("Run: ") + command;
+}
+
+QString formatShortcutCombo(const QString& mods, const QString& key) {
+    QString prettyKey = key;
+    if (prettyKey.size() == 1) {
+        prettyKey = prettyKey.toUpper();
+    } else if (prettyKey.startsWith(QStringLiteral("XF86"))) {
+        prettyKey = prettyKey.mid(4);
+    }
+    if (mods.trimmed().isEmpty()) {
+        return prettyKey;
+    }
+    QString prettyMods = mods;
+    prettyMods.replace(QLatin1Char('+'), QStringLiteral(" + "));
+    return prettyMods + QStringLiteral(" + ") + prettyKey;
+}
+
+} // namespace
+
+QVariantList SettingsBackend::shortcuts() const {
+    const QList<ShortcutEntry>& list = m_cfg.shortcuts.isEmpty()
+        ? ConfigData::defaultShortcuts()
+        : m_cfg.shortcuts;
+    QVariantList out;
+    out.reserve(list.size());
+    for (int i = 0; i < list.size(); ++i) {
+        const ShortcutEntry& sc = list.at(i);
+        QVariantMap item;
+        item.insert(QStringLiteral("index"), i);
+        item.insert(QStringLiteral("action"), sc.action);
+        item.insert(QStringLiteral("label"), labelForShortcutAction(sc.action, sc.command));
+        item.insert(QStringLiteral("mods"), sc.mods);
+        item.insert(QStringLiteral("key"), sc.key);
+        item.insert(QStringLiteral("command"), sc.command);
+        item.insert(QStringLiteral("displayCombo"), formatShortcutCombo(sc.mods, sc.key));
+        item.insert(QStringLiteral("isCustom"), sc.action == QStringLiteral("custom"));
+        out.append(item);
+    }
+    return out;
+}
+
+void SettingsBackend::updateShortcut(int index, const QString& mods, const QString& key) {
+    if (m_cfg.shortcuts.isEmpty()) {
+        m_cfg.shortcuts = ConfigData::defaultShortcuts();
+    }
+    if (index < 0 || index >= m_cfg.shortcuts.size() || key.trimmed().isEmpty()) {
+        return;
+    }
+    m_cfg.shortcuts[index].mods = mods.trimmed();
+    m_cfg.shortcuts[index].key = key.trimmed();
+    applyAndSave();
+    emit shortcutsChanged();
+}
+
+void SettingsBackend::addCustomShortcut(const QString& mods, const QString& key, const QString& command) {
+    if (key.trimmed().isEmpty() || command.trimmed().isEmpty()) {
+        return;
+    }
+    if (m_cfg.shortcuts.isEmpty()) {
+        m_cfg.shortcuts = ConfigData::defaultShortcuts();
+    }
+    m_cfg.shortcuts.append(ShortcutEntry{
+        QStringLiteral("custom"),
+        mods.trimmed(),
+        key.trimmed(),
+        command.trimmed(),
+    });
+    applyAndSave();
+    emit shortcutsChanged();
+}
+
+void SettingsBackend::removeShortcut(int index) {
+    if (index < 0 || index >= m_cfg.shortcuts.size()) {
+        return;
+    }
+    if (m_cfg.shortcuts.at(index).action != QStringLiteral("custom")) {
+        return;
+    }
+    m_cfg.shortcuts.removeAt(index);
+    applyAndSave();
+    emit shortcutsChanged();
+}
+
+void SettingsBackend::resetShortcuts() {
+    m_cfg.shortcuts = ConfigData::defaultShortcuts();
+    applyAndSave();
+    emit shortcutsChanged();
+}
+
+QString SettingsBackend::formatModifiers(int qtModifiers) const {
+    QStringList parts;
+    if (qtModifiers & Qt::MetaModifier) parts << QStringLiteral("Super");
+    if (qtModifiers & Qt::ControlModifier) parts << QStringLiteral("Ctrl");
+    if (qtModifiers & Qt::AltModifier) parts << QStringLiteral("Alt");
+    if (qtModifiers & Qt::ShiftModifier) parts << QStringLiteral("Shift");
+    return parts.join(QLatin1Char('+'));
+}
+
+QString SettingsBackend::qtKeyToXkbName(int qtKey) const {
+    if (qtKey >= Qt::Key_A && qtKey <= Qt::Key_Z) {
+        return QString(QChar::fromLatin1(static_cast<char>('a' + (qtKey - Qt::Key_A))));
+    }
+    if (qtKey >= Qt::Key_0 && qtKey <= Qt::Key_9) {
+        return QString(QChar::fromLatin1(static_cast<char>('0' + (qtKey - Qt::Key_0))));
+    }
+    if (qtKey >= Qt::Key_F1 && qtKey <= Qt::Key_F12) {
+        return QStringLiteral("F%1").arg(1 + (qtKey - Qt::Key_F1));
+    }
+    switch (qtKey) {
+        case Qt::Key_Return: return QStringLiteral("Return");
+        case Qt::Key_Enter: return QStringLiteral("KP_Enter");
+        case Qt::Key_Space: return QStringLiteral("space");
+        case Qt::Key_Tab:
+        case Qt::Key_Backtab: return QStringLiteral("Tab");
+        case Qt::Key_Backspace: return QStringLiteral("BackSpace");
+        case Qt::Key_Delete: return QStringLiteral("Delete");
+        case Qt::Key_Insert: return QStringLiteral("Insert");
+        case Qt::Key_Home: return QStringLiteral("Home");
+        case Qt::Key_End: return QStringLiteral("End");
+        case Qt::Key_PageUp: return QStringLiteral("Prior");
+        case Qt::Key_PageDown: return QStringLiteral("Next");
+        case Qt::Key_Left: return QStringLiteral("Left");
+        case Qt::Key_Right: return QStringLiteral("Right");
+        case Qt::Key_Up: return QStringLiteral("Up");
+        case Qt::Key_Down: return QStringLiteral("Down");
+        case Qt::Key_Print: return QStringLiteral("Print");
+        case Qt::Key_Minus: return QStringLiteral("minus");
+        case Qt::Key_Equal: return QStringLiteral("equal");
+        case Qt::Key_BracketLeft: return QStringLiteral("bracketleft");
+        case Qt::Key_BracketRight: return QStringLiteral("bracketright");
+        case Qt::Key_Semicolon: return QStringLiteral("semicolon");
+        case Qt::Key_Apostrophe: return QStringLiteral("apostrophe");
+        case Qt::Key_Comma: return QStringLiteral("comma");
+        case Qt::Key_Period: return QStringLiteral("period");
+        case Qt::Key_Slash: return QStringLiteral("slash");
+        case Qt::Key_Backslash: return QStringLiteral("backslash");
+        case Qt::Key_QuoteLeft: return QStringLiteral("grave");
+        case Qt::Key_VolumeUp: return QStringLiteral("XF86AudioRaiseVolume");
+        case Qt::Key_VolumeDown: return QStringLiteral("XF86AudioLowerVolume");
+        case Qt::Key_VolumeMute: return QStringLiteral("XF86AudioMute");
+        case Qt::Key_MonBrightnessUp: return QStringLiteral("XF86MonBrightnessUp");
+        case Qt::Key_MonBrightnessDown: return QStringLiteral("XF86MonBrightnessDown");
+        case Qt::Key_MediaPlay: return QStringLiteral("XF86AudioPlay");
+        case Qt::Key_MediaNext: return QStringLiteral("XF86AudioNext");
+        case Qt::Key_MediaPrevious: return QStringLiteral("XF86AudioPrev");
+        default: return {};
+    }
 }
 
 void SettingsBackend::notifyWmReload() {

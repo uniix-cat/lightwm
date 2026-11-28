@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Effects
 import QtQuick.Layouts
 import "../components"
 
@@ -27,27 +28,47 @@ Window {
         }
     }
 
-    // Match user's wallpaper or theme gradient behind the lock card
-    Rectangle {
+    // Match user's wallpaper or theme gradient behind the lock card, with Gaussian blur
+    Item {
+        id: lockBg
         anchors.fill: parent
-        visible: Theme.wallpaperPath.length === 0
-        gradient: Gradient {
-            GradientStop { position: 0.0; color: Theme.background }
-            GradientStop { position: 1.0; color: Theme.surface }
+        visible: !(Theme.blurEnabled && Theme.blurStrength > 0)
+        layer.enabled: Theme.blurEnabled && Theme.blurStrength > 0
+
+        Rectangle {
+            anchors.fill: parent
+            visible: Theme.wallpaperPath.length === 0
+            gradient: Gradient {
+                GradientStop { position: 0.0; color: Theme.background }
+                GradientStop { position: 1.0; color: Theme.surface }
+            }
+        }
+
+        Image {
+            anchors.fill: parent
+            visible: Theme.wallpaperPath.length > 0
+            source: Theme.wallpaperPath.length > 0 ? "file://" + Theme.wallpaperPath : ""
+            fillMode: Image.PreserveAspectCrop
+            asynchronous: true
         }
     }
 
-    Image {
+    MultiEffect {
         anchors.fill: parent
-        visible: Theme.wallpaperPath.length > 0
-        source: Theme.wallpaperPath.length > 0 ? "file://" + Theme.wallpaperPath : ""
-        fillMode: Image.PreserveAspectCrop
-        asynchronous: true
+        visible: Theme.blurEnabled && Theme.blurStrength > 0
+        source: lockBg
+        autoPaddingEnabled: false
+        blurEnabled: true
+        blur: 1.0
+        blurMax: Math.max(48, Theme.blurStrength)
+        blurMultiplier: 1.6
+        brightness: -0.14
+        saturation: 0.12
     }
 
     Rectangle {
         anchors.fill: parent
-        color: "#66000000"
+        color: Theme.blurEnabled && Theme.blurStrength > 0 ? "#38000000" : "#66000000"
     }
 
     ThemeSurface {

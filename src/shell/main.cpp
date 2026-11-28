@@ -2,6 +2,7 @@
 #include "shell/WmClient.hpp"
 #include "shell/services/AppLauncherService.hpp"
 #include "shell/services/AudioService.hpp"
+#include "shell/services/BackdropBlurService.hpp"
 #include "shell/services/BatteryService.hpp"
 #include "shell/services/BluetoothService.hpp"
 #include "shell/services/BrightnessService.hpp"
@@ -26,6 +27,7 @@ int main(int argc, char* argv[]) {
     lightwm::Theme theme;
     lightwm::shell::WmClient wmClient;
     lightwm::shell::AppLauncherService launcherService;
+    lightwm::shell::BackdropBlurService backdropService;
     lightwm::shell::NetworkService networkService;
     lightwm::shell::BluetoothService bluetoothService;
     lightwm::shell::AudioService audioService;
@@ -46,11 +48,13 @@ int main(int argc, char* argv[]) {
                      &lockscreenService, &lightwm::shell::LockscreenService::lock);
 
     QQmlApplicationEngine engine;
+    engine.addImageProvider(QStringLiteral("backdrop"), backdropService.createImageProvider());
     lockscreenService.setEngine(&engine);
 
     engine.rootContext()->setContextProperty(QStringLiteral("Theme"), &theme);
     engine.rootContext()->setContextProperty(QStringLiteral("Wm"), &wmClient);
     engine.rootContext()->setContextProperty(QStringLiteral("Launcher"), &launcherService);
+    engine.rootContext()->setContextProperty(QStringLiteral("Backdrop"), &backdropService);
     engine.rootContext()->setContextProperty(QStringLiteral("Network"), &networkService);
     engine.rootContext()->setContextProperty(QStringLiteral("Bluetooth"), &bluetoothService);
     engine.rootContext()->setContextProperty(QStringLiteral("Audio"), &audioService);

@@ -33,6 +33,10 @@ Window {
         anchors.leftMargin: 12
         anchors.rightMargin: 12
         radius: Theme.radius
+        useWallpaperBackdrop: true
+        screenWidth: barWin.width
+        screenHeight: barWin.targetScreen ? barWin.targetScreen.height : 1080
+        backdropRect: Qt.rect(12, 6, barWin.width - 24, barWin.height - 8)
 
         RowLayout {
             anchors.fill: parent

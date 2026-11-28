@@ -2,11 +2,33 @@
 
 #include <QDir>
 #include <QFile>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QStandardPaths>
 
 namespace lightwm {
+
+QList<ShortcutEntry> ConfigData::defaultShortcuts() {
+    return {
+        {QStringLiteral("spawn_terminal"), QStringLiteral("Super"), QStringLiteral("q"), {}},
+        {QStringLiteral("toggle_launcher"), QStringLiteral("Super"), QStringLiteral("r"), {}},
+        {QStringLiteral("close_focused"), QStringLiteral("Super"), QStringLiteral("c"), {}},
+        {QStringLiteral("toggle_float"), QStringLiteral("Super"), QStringLiteral("v"), {}},
+        {QStringLiteral("toggle_fullscreen"), QStringLiteral("Super"), QStringLiteral("f"), {}},
+        {QStringLiteral("focus_left"), QStringLiteral("Super"), QStringLiteral("h"), {}},
+        {QStringLiteral("focus_down"), QStringLiteral("Super"), QStringLiteral("j"), {}},
+        {QStringLiteral("focus_up"), QStringLiteral("Super"), QStringLiteral("k"), {}},
+        {QStringLiteral("focus_right"), QStringLiteral("Super"), QStringLiteral("l"), {}},
+        {QStringLiteral("lock_screen"), QStringLiteral("Super+Shift"), QStringLiteral("l"), {}},
+        {QStringLiteral("screenshot"), QString(), QStringLiteral("Print"), {}},
+        {QStringLiteral("audio_raise"), QString(), QStringLiteral("XF86AudioRaiseVolume"), {}},
+        {QStringLiteral("audio_lower"), QString(), QStringLiteral("XF86AudioLowerVolume"), {}},
+        {QStringLiteral("audio_mute"), QString(), QStringLiteral("XF86AudioMute"), {}},
+        {QStringLiteral("brightness_up"), QString(), QStringLiteral("XF86MonBrightnessUp"), {}},
+        {QStringLiteral("brightness_down"), QString(), QStringLiteral("XF86MonBrightnessDown"), {}},
+    };
+}
 
 QString ConfigStore::configFilePath() {
     const QString base = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation);
@@ -40,6 +62,9 @@ ConfigData ConfigStore::load() {
     cfg.barHeight = root.value(QStringLiteral("barHeight")).toInt(cfg.barHeight);
     cfg.wallpaperPath = root.value(QStringLiteral("wallpaperPath")).toString(cfg.wallpaperPath);
     cfg.wallpaperMode = root.value(QStringLiteral("wallpaperMode")).toString(cfg.wallpaperMode);
+    cfg.blurEnabled = root.value(QStringLiteral("blurEnabled")).toBool(cfg.blurEnabled);
+    cfg.blurStrength = qBound(0, root.value(QStringLiteral("blurStrength")).toInt(cfg.blurStrength), 64);
+    cfg.glassOpacity = qBound(0.35, root.value(QStringLiteral("glassOpacity")).toDouble(cfg.glassOpacity), 0.95);
 
     cfg.workspaceCount = qBound(1, root.value(QStringLiteral("workspaceCount")).toInt(cfg.workspaceCount), 12);
     cfg.dwindleSplitRatio = qBound(0.2, root.value(QStringLiteral("dwindleSplitRatio")).toDouble(cfg.dwindleSplitRatio), 0.8);
@@ -75,6 +100,24 @@ ConfigData ConfigStore::load() {
     cfg.cursorSize = qBound(16, root.value(QStringLiteral("cursorSize")).toInt(cfg.cursorSize), 64);
     cfg.qtPlatformTheme = root.value(QStringLiteral("qtPlatformTheme")).toString(cfg.qtPlatformTheme);
     cfg.qtStyle = root.value(QStringLiteral("qtStyle")).toString();
+
+    const QJsonValue scVal = root.value(QStringLiteral("shortcuts"));
+    if (scVal.isArray()) {
+        for (const QJsonValue& v : scVal.toArray()) {
+            if (!v.isObject()) continue;
+            const QJsonObject o = v.toObject();
+            ShortcutEntry entry;
+            entry.action = o.value(QStringLiteral("action")).toString();
+            entry.mods = o.value(QStringLiteral("mods")).toString();
+            entry.key = o.value(QStringLiteral("key")).toString();
+            entry.command = o.value(QStringLiteral("command")).toString();
+            if (!entry.action.isEmpty() && !entry.key.isEmpty()) {
+                cfg.shortcuts.append(entry);
+            }
+        }
+    } else {
+        cfg.shortcuts = ConfigData::defaultShortcuts();
+    }
     return cfg;
 }
 
@@ -93,6 +136,9 @@ bool ConfigStore::save(const ConfigData& cfg) {
     root.insert(QStringLiteral("barHeight"), cfg.barHeight);
     root.insert(QStringLiteral("wallpaperPath"), cfg.wallpaperPath);
     root.insert(QStringLiteral("wallpaperMode"), cfg.wallpaperMode);
+    root.insert(QStringLiteral("blurEnabled"), cfg.blurEnabled);
+    root.insert(QStringLiteral("blurStrength"), cfg.blurStrength);
+    root.insert(QStringLiteral("glassOpacity"), cfg.glassOpacity);
 
     root.insert(QStringLiteral("workspaceCount"), cfg.workspaceCount);
     root.insert(QStringLiteral("dwindleSplitRatio"), cfg.dwindleSplitRatio);
@@ -120,6 +166,22 @@ bool ConfigStore::save(const ConfigData& cfg) {
     root.insert(QStringLiteral("cursorSize"), cfg.cursorSize);
     root.insert(QStringLiteral("qtPlatformTheme"), cfg.qtPlatformTheme);
     root.insert(QStringLiteral("qtStyle"), cfg.qtStyle);
+
+    QJsonArray scArr;
+    const QList<ShortcutEntry>& shortcutsToSave = cfg.shortcuts.isEmpty()
+        ? ConfigData::defaultShortcuts()
+        : cfg.shortcuts;
+    for (const ShortcutEntry& entry : shortcutsToSave) {
+        QJsonObject o;
+        o.insert(QStringLiteral("action"), entry.action);
+        o.insert(QStringLiteral("mods"), entry.mods);
+        o.insert(QStringLiteral("key"), entry.key);
+        if (!entry.command.isEmpty()) {
+            o.insert(QStringLiteral("command"), entry.command);
+        }
+        scArr.append(o);
+    }
+    root.insert(QStringLiteral("shortcuts"), scArr);
 
     QFile file(path);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {

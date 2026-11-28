@@ -24,8 +24,13 @@ class SettingsBackend : public QObject {
     Q_PROPERTY(bool naturalScroll READ naturalScroll WRITE setNaturalScroll NOTIFY changed)
     Q_PROPERTY(double pointerSpeed READ pointerSpeed WRITE setPointerSpeed NOTIFY changed)
     Q_PROPERTY(QString terminal READ terminal WRITE setTerminal NOTIFY changed)
+    Q_PROPERTY(QStringList availableTerminals READ availableTerminals CONSTANT)
     Q_PROPERTY(QString wallpaperPath READ wallpaperPath WRITE setWallpaperPath NOTIFY changed)
     Q_PROPERTY(QString wallpaperMode READ wallpaperMode WRITE setWallpaperMode NOTIFY changed)
+    Q_PROPERTY(bool blurEnabled READ blurEnabled WRITE setBlurEnabled NOTIFY changed)
+    Q_PROPERTY(int blurStrength READ blurStrength WRITE setBlurStrength NOTIFY changed)
+    Q_PROPERTY(double glassOpacity READ glassOpacity WRITE setGlassOpacity NOTIFY changed)
+    Q_PROPERTY(QVariantList shortcuts READ shortcuts NOTIFY shortcutsChanged)
     Q_PROPERTY(QString colorScheme READ colorScheme WRITE setColorScheme NOTIFY changed)
     Q_PROPERTY(QString gtkTheme READ gtkTheme WRITE setGtkTheme NOTIFY changed)
     Q_PROPERTY(QString iconTheme READ iconTheme WRITE setIconTheme NOTIFY changed)
@@ -78,13 +83,31 @@ public:
     void setPointerSpeed(double v) { m_cfg.pointerSpeed = qBound(-1.0, v, 1.0); applyAndSave(); }
 
     QString terminal() const { return m_cfg.terminal; }
-    void setTerminal(const QString& v) { m_cfg.terminal = v; applyAndSave(); }
+    void setTerminal(const QString& v) { m_cfg.terminal = v.trimmed(); applyAndSave(); }
+    QStringList availableTerminals() const;
 
     QString wallpaperPath() const { return m_cfg.wallpaperPath; }
     void setWallpaperPath(const QString& v) { m_cfg.wallpaperPath = v; applyAndSave(); }
 
     QString wallpaperMode() const { return m_cfg.wallpaperMode; }
     void setWallpaperMode(const QString& v) { m_cfg.wallpaperMode = v; applyAndSave(); }
+
+    bool blurEnabled() const { return m_cfg.blurEnabled; }
+    void setBlurEnabled(bool v) { m_cfg.blurEnabled = v; applyAndSave(); }
+
+    int blurStrength() const { return m_cfg.blurStrength; }
+    void setBlurStrength(int v) { m_cfg.blurStrength = qBound(0, v, 64); applyAndSave(); }
+
+    double glassOpacity() const { return m_cfg.glassOpacity; }
+    void setGlassOpacity(double v) { m_cfg.glassOpacity = qBound(0.35, v, 0.95); applyAndSave(); }
+
+    QVariantList shortcuts() const;
+    Q_INVOKABLE void updateShortcut(int index, const QString& mods, const QString& key);
+    Q_INVOKABLE void addCustomShortcut(const QString& mods, const QString& key, const QString& command);
+    Q_INVOKABLE void removeShortcut(int index);
+    Q_INVOKABLE void resetShortcuts();
+    Q_INVOKABLE QString formatModifiers(int qtModifiers) const;
+    Q_INVOKABLE QString qtKeyToXkbName(int qtKey) const;
 
     QString colorScheme() const { return m_cfg.colorScheme; }
     void setColorScheme(const QString& v) { m_cfg.colorScheme = v; applyToolkitAndSave(); }
@@ -124,6 +147,7 @@ signals:
     void changed();
     void displaysChanged();
     void toolkitListsChanged();
+    void shortcutsChanged();
 
 private slots:
     void tryConnectIpc();

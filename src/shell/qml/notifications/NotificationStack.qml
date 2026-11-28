@@ -5,7 +5,14 @@ import "../components"
 
 Window {
     id: root
-    visible: Notifications.notifications.length > 0
+    readonly property int notifCount: Notifications.notifications.length
+    onNotifCountChanged: {
+        if (notifCount > 0 && !visible && Theme.blurEnabled && Theme.blurStrength > 0 && Backdrop.available) {
+            Backdrop.capturePrimary()
+        }
+    }
+
+    visible: notifCount > 0
     width: 340
     height: Math.min(480, Math.max(80, col.implicitHeight + 16))
     color: "transparent"
@@ -24,11 +31,17 @@ Window {
         Repeater {
             model: Notifications.notifications
             delegate: ThemeSurface {
+                id: toastCard
                 required property var modelData
                 Layout.fillWidth: true
                 implicitHeight: innerCol.implicitHeight + 20
                 elevated: true
                 border.color: Theme.borderActive
+                readonly property var activeScr: Qt.application.screens.length > 0 ? Qt.application.screens[0] : null
+                backdropScreenName: activeScr ? activeScr.name : ""
+                screenWidth: activeScr ? activeScr.width : 1920
+                screenHeight: activeScr ? activeScr.height : 1080
+                backdropRect: Qt.rect(screenWidth - root.width - 12, Theme.barHeight + 14 + toastCard.y, toastCard.width, toastCard.height)
 
                 ColumnLayout {
                     id: innerCol

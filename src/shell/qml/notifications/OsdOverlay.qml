@@ -11,6 +11,9 @@ Window {
     function showOsd(label, value) {
         osdLabel = label
         osdValue = value
+        if (!visible && Theme.blurEnabled && Theme.blurStrength > 0 && Backdrop.available) {
+            Backdrop.capturePrimary()
+        }
         visible = true
         hideTimer.restart()
     }
@@ -36,6 +39,11 @@ Window {
         anchors.fill: parent
         elevated: true
         border.color: Theme.borderActive
+        readonly property var activeScr: Qt.application.screens.length > 0 ? Qt.application.screens[0] : null
+        backdropScreenName: activeScr ? activeScr.name : ""
+        screenWidth: activeScr ? activeScr.width : 1920
+        screenHeight: activeScr ? activeScr.height : 1080
+        backdropRect: Qt.rect((screenWidth - root.width) / 2, screenHeight - root.height - 48, root.width, root.height)
 
         RowLayout {
             anchors.fill: parent

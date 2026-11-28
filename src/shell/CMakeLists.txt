@@ -4,6 +4,8 @@ set(SHELL_SOURCES
     WmClient.cpp
     services/AppLauncherService.hpp
     services/AppLauncherService.cpp
+    services/BackdropBlurService.hpp
+    services/BackdropBlurService.cpp
     services/NetworkService.hpp
     services/NetworkService.cpp
     services/BluetoothService.hpp

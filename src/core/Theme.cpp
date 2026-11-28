@@ -124,6 +124,9 @@ void Theme::reloadFromConfig() {
     }
     m_wallpaperPath = cfg.wallpaperPath;
     m_wallpaperMode = cfg.wallpaperMode;
+    m_blurEnabled = cfg.blurEnabled;
+    m_blurStrength = cfg.blurStrength;
+    m_glassOpacity = cfg.glassOpacity;
     emit changed();
 }
 

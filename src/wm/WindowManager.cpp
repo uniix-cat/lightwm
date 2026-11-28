@@ -987,6 +987,16 @@ void WindowManager::onOutputRemoved(OutputState* out) {
 }
 
 void WindowManager::onSeatRemoved(SeatState* seat) {
+    clearSeatXkbBindings(seat);
+    for (auto* pb : seat->pointerBindings) {
+        if (pb) river_pointer_binding_v1_destroy(pb);
+    }
+    seat->pointerBindings.clear();
+    m_pointerBindingData.erase(
+        std::remove_if(m_pointerBindingData.begin(), m_pointerBindingData.end(),
+                       [seat](const auto& ptr) { return ptr->seat == seat; }),
+        m_pointerBindingData.end());
+
     if (seat->layerSeat) river_layer_shell_seat_v1_destroy(seat->layerSeat);
     river_seat_v1_destroy(seat->wl);
     m_seats.erase(
@@ -995,50 +1005,98 @@ void WindowManager::onSeatRemoved(SeatState* seat) {
         m_seats.end());
 }
 
+void WindowManager::clearSeatXkbBindings(SeatState* seat) {
+    if (!seat) return;
+    for (auto* kb : seat->xkbBindings) {
+        if (kb) river_xkb_binding_v1_destroy(kb);
+    }
+    seat->xkbBindings.clear();
+    m_xkbBindingData.erase(
+        std::remove_if(m_xkbBindingData.begin(), m_xkbBindingData.end(),
+                       [seat](const auto& ptr) { return ptr->seat == seat; }),
+        m_xkbBindingData.end());
+    seat->bindingsCreated = false;
+}
+
 void WindowManager::setupSeatBindings(SeatState* seat) {
     if (!m_xkbBindings || seat->bindingsCreated) return;
 
     const uint32_t modSuper = RIVER_SEAT_V1_MODIFIERS_MOD4;
     const uint32_t modSuperShift = RIVER_SEAT_V1_MODIFIERS_MOD4 | RIVER_SEAT_V1_MODIFIERS_SHIFT;
 
-    auto addKey = [&](uint32_t keysym, uint32_t mods, BindingAction action) {
+    auto addKey = [&](uint32_t keysym, uint32_t mods, BindingAction action, const std::string& command = {}) {
         auto* binding = river_xkb_bindings_v1_get_xkb_binding(m_xkbBindings, seat->wl, keysym, mods);
         auto bd = std::make_unique<XkbBindingData>();
         bd->wm = this;
         bd->seat = seat;
         bd->action = action;
+        bd->command = command;
         bd->wl = binding;
         river_xkb_binding_v1_add_listener(binding, &kXkbBindingListener, bd.get());
         seat->xkbBindings.push_back(binding);
         m_xkbBindingData.push_back(std::move(bd));
     };
 
-    addKey(XKB_KEY_q, modSuper, BindingAction::SpawnTerminal);
-    addKey(XKB_KEY_Q, modSuper, BindingAction::SpawnTerminal);
-    addKey(XKB_KEY_c, modSuper, BindingAction::CloseFocused);
-    addKey(XKB_KEY_C, modSuper, BindingAction::CloseFocused);
-    addKey(XKB_KEY_v, modSuper, BindingAction::ToggleFloat);
-    addKey(XKB_KEY_V, modSuper, BindingAction::ToggleFloat);
-    addKey(XKB_KEY_f, modSuper, BindingAction::ToggleFullscreen);
-    addKey(XKB_KEY_F, modSuper, BindingAction::ToggleFullscreen);
-    addKey(XKB_KEY_h, modSuper, BindingAction::FocusLeft);
-    addKey(XKB_KEY_H, modSuper, BindingAction::FocusLeft);
-    addKey(XKB_KEY_j, modSuper, BindingAction::FocusDown);
-    addKey(XKB_KEY_J, modSuper, BindingAction::FocusDown);
-    addKey(XKB_KEY_k, modSuper, BindingAction::FocusUp);
-    addKey(XKB_KEY_K, modSuper, BindingAction::FocusUp);
-    addKey(XKB_KEY_l, modSuper, BindingAction::FocusRight);
-    addKey(XKB_KEY_L, modSuper, BindingAction::FocusRight);
-    addKey(XKB_KEY_r, modSuper, BindingAction::ToggleLauncher);
-    addKey(XKB_KEY_R, modSuper, BindingAction::ToggleLauncher);
-    addKey(XKB_KEY_l, modSuperShift, BindingAction::LockScreen);
-    addKey(XKB_KEY_L, modSuperShift, BindingAction::LockScreen);
-    addKey(XKB_KEY_Print, 0, BindingAction::Screenshot);
-    addKey(XKB_KEY_XF86AudioRaiseVolume, 0, BindingAction::AudioRaise);
-    addKey(XKB_KEY_XF86AudioLowerVolume, 0, BindingAction::AudioLower);
-    addKey(XKB_KEY_XF86AudioMute, 0, BindingAction::AudioMute);
-    addKey(XKB_KEY_XF86MonBrightnessUp, 0, BindingAction::BrightnessUp);
-    addKey(XKB_KEY_XF86MonBrightnessDown, 0, BindingAction::BrightnessDown);
+    auto parseMods = [](const QString& modsStr) -> uint32_t {
+        uint32_t mask = 0;
+        const QStringList parts = modsStr.split(QLatin1Char('+'), Qt::SkipEmptyParts);
+        for (const QString& raw : parts) {
+            const QString p = raw.trimmed().toLower();
+            if (p == QStringLiteral("super") || p == QStringLiteral("mod4") || p == QStringLiteral("meta")) {
+                mask |= RIVER_SEAT_V1_MODIFIERS_MOD4;
+            } else if (p == QStringLiteral("shift")) {
+                mask |= RIVER_SEAT_V1_MODIFIERS_SHIFT;
+            } else if (p == QStringLiteral("ctrl") || p == QStringLiteral("control")) {
+                mask |= RIVER_SEAT_V1_MODIFIERS_CTRL;
+            } else if (p == QStringLiteral("alt") || p == QStringLiteral("mod1")) {
+                mask |= RIVER_SEAT_V1_MODIFIERS_MOD1;
+            }
+        }
+        return mask;
+    };
+
+    auto parseAction = [](const QString& act) -> BindingAction {
+        if (act == QStringLiteral("spawn_terminal")) return BindingAction::SpawnTerminal;
+        if (act == QStringLiteral("close_focused")) return BindingAction::CloseFocused;
+        if (act == QStringLiteral("toggle_float")) return BindingAction::ToggleFloat;
+        if (act == QStringLiteral("toggle_fullscreen")) return BindingAction::ToggleFullscreen;
+        if (act == QStringLiteral("focus_left")) return BindingAction::FocusLeft;
+        if (act == QStringLiteral("focus_down")) return BindingAction::FocusDown;
+        if (act == QStringLiteral("focus_up")) return BindingAction::FocusUp;
+        if (act == QStringLiteral("focus_right")) return BindingAction::FocusRight;
+        if (act == QStringLiteral("toggle_launcher")) return BindingAction::ToggleLauncher;
+        if (act == QStringLiteral("lock_screen")) return BindingAction::LockScreen;
+        if (act == QStringLiteral("screenshot")) return BindingAction::Screenshot;
+        if (act == QStringLiteral("audio_raise")) return BindingAction::AudioRaise;
+        if (act == QStringLiteral("audio_lower")) return BindingAction::AudioLower;
+        if (act == QStringLiteral("audio_mute")) return BindingAction::AudioMute;
+        if (act == QStringLiteral("brightness_up")) return BindingAction::BrightnessUp;
+        if (act == QStringLiteral("brightness_down")) return BindingAction::BrightnessDown;
+        return BindingAction::CustomCommand;
+    };
+
+    const QList<ShortcutEntry>& shortcuts = m_config.shortcuts.isEmpty()
+        ? ConfigData::defaultShortcuts()
+        : m_config.shortcuts;
+    for (const ShortcutEntry& sc : shortcuts) {
+        if (sc.key.trimmed().isEmpty()) continue;
+        const xkb_keysym_t sym = xkb_keysym_from_name(sc.key.trimmed().toUtf8().constData(), XKB_KEYSYM_CASE_INSENSITIVE);
+        if (sym == XKB_KEY_NoSymbol) {
+            std::cerr << "[lightwm-wm] Unknown shortcut keysym: " << sc.key.toStdString() << "\n";
+            continue;
+        }
+        const uint32_t mods = parseMods(sc.mods);
+        const BindingAction act = parseAction(sc.action);
+        const std::string cmd = (act == BindingAction::CustomCommand) ? sc.command.toStdString() : std::string();
+        if (act == BindingAction::CustomCommand && cmd.empty()) continue;
+
+        const xkb_keysym_t lower = xkb_keysym_to_lower(sym);
+        const xkb_keysym_t upper = xkb_keysym_to_upper(sym);
+        addKey(sym, mods, act, cmd);
+        if (lower != upper) {
+            addKey(sym == lower ? upper : lower, mods, act, cmd);
+        }
+    }
 
     const uint32_t numKeys[9] = {
         XKB_KEY_1, XKB_KEY_2, XKB_KEY_3, XKB_KEY_4, XKB_KEY_5,
@@ -1054,20 +1112,23 @@ void WindowManager::setupSeatBindings(SeatState* seat) {
         addKey(shiftSyms[i], modSuperShift, static_cast<BindingAction>(static_cast<int>(BindingAction::MoveWorkspace1) + i));
     }
 
-    auto addPtr = [&](uint32_t btn, uint32_t mods, PointerOpKind op) {
-        auto* pb = river_seat_v1_get_pointer_binding(seat->wl, btn, mods);
-        auto pd = std::make_unique<PointerBindingData>();
-        pd->wm = this;
-        pd->seat = seat;
-        pd->op = op;
-        pd->wl = pb;
-        river_pointer_binding_v1_add_listener(pb, &kPtrBindingListener, pd.get());
-        seat->pointerBindings.push_back(pb);
-        m_pointerBindingData.push_back(std::move(pd));
-    };
+    if (!seat->pointerBindingsCreated) {
+        auto addPtr = [&](uint32_t btn, uint32_t mods, PointerOpKind op) {
+            auto* pb = river_seat_v1_get_pointer_binding(seat->wl, btn, mods);
+            auto pd = std::make_unique<PointerBindingData>();
+            pd->wm = this;
+            pd->seat = seat;
+            pd->op = op;
+            pd->wl = pb;
+            river_pointer_binding_v1_add_listener(pb, &kPtrBindingListener, pd.get());
+            seat->pointerBindings.push_back(pb);
+            m_pointerBindingData.push_back(std::move(pd));
+        };
 
-    addPtr(BTN_LEFT, modSuper, PointerOpKind::Move);
-    addPtr(BTN_RIGHT, modSuper, PointerOpKind::Resize);
+        addPtr(BTN_LEFT, modSuper, PointerOpKind::Move);
+        addPtr(BTN_RIGHT, modSuper, PointerOpKind::Resize);
+        seat->pointerBindingsCreated = true;
+    }
 
     seat->bindingsCreated = true;
     seat->bindingsDirty = true;
@@ -1103,6 +1164,7 @@ static void xkbBindingPressedDispatch(void* data, river_xkb_binding_v1*) {
         case A::AudioMute: b->wm->onActionIpcCommand({{"event", "audio_mute_toggle"}}); break;
         case A::BrightnessUp: b->wm->onActionIpcCommand({{"event", "brightness_step"}, {"delta", 5}}); break;
         case A::BrightnessDown: b->wm->onActionIpcCommand({{"event", "brightness_step"}, {"delta", -5}}); break;
+        case A::CustomCommand: b->wm->onActionSpawnCommand(b->command); break;
         default: break;
     }
 }
@@ -1630,6 +1692,10 @@ void WindowManager::reloadConfig() {
     }
     for (auto& dev : m_libinputDevices) {
         applyLibinputConfig(dev.get());
+    }
+    for (auto& seat : m_seats) {
+        clearSeatXkbBindings(seat.get());
+        setupSeatBindings(seat.get());
     }
     scheduleManageDirty();
 }

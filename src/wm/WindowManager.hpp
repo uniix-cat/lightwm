@@ -131,6 +131,7 @@ struct SeatState {
     std::vector<river_xkb_binding_v1*> xkbBindings;
     std::vector<river_pointer_binding_v1*> pointerBindings;
     bool bindingsCreated = false;
+    bool pointerBindingsCreated = false;
     bool bindingsDirty = true;
     std::string cursorTheme;
     int cursorSize = 0;
@@ -244,12 +245,14 @@ public:
         MoveWorkspace7,
         MoveWorkspace8,
         MoveWorkspace9,
+        CustomCommand,
     };
 
     struct XkbBindingData {
         WindowManager* wm = nullptr;
         SeatState* seat = nullptr;
         BindingAction action{};
+        std::string command;
         river_xkb_binding_v1* wl = nullptr;
     };
 
@@ -262,6 +265,7 @@ public:
 
 private:
     void setupSeatBindings(SeatState* seat);
+    void clearSeatXkbBindings(SeatState* seat);
     void rebuildAndPushXkbKeymap();
     void applyXkbKeymapToKeyboards();
     void broadcastIpcState();

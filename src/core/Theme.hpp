@@ -61,6 +61,9 @@ class Theme : public QObject {
     Q_PROPERTY(QString iconFontFamily READ iconFontFamily NOTIFY changed)
     Q_PROPERTY(QString wallpaperPath READ wallpaperPath NOTIFY changed)
     Q_PROPERTY(QString wallpaperMode READ wallpaperMode NOTIFY changed)
+    Q_PROPERTY(bool blurEnabled READ blurEnabled NOTIFY changed)
+    Q_PROPERTY(int blurStrength READ blurStrength NOTIFY changed)
+    Q_PROPERTY(double glassOpacity READ glassOpacity NOTIFY changed)
 
 public:
     explicit Theme(QObject* parent = nullptr);
@@ -99,6 +102,9 @@ public:
 
     QString wallpaperPath() const { return m_wallpaperPath; }
     QString wallpaperMode() const { return m_wallpaperMode; }
+    bool blurEnabled() const { return m_blurEnabled; }
+    int blurStrength() const { return m_blurStrength; }
+    double glassOpacity() const { return m_glassOpacity; }
 
     Q_INVOKABLE void reloadFromConfig();
 
@@ -115,6 +121,9 @@ private:
     QString m_iconFontFamily = QStringLiteral("JetBrainsMono Nerd Font Propo");
     QString m_wallpaperPath;
     QString m_wallpaperMode = QStringLiteral("fill");
+    bool m_blurEnabled = true;
+    int m_blurStrength = 48;
+    double m_glassOpacity = 0.72;
 };
 
 } // namespace lightwm

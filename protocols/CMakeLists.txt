@@ -13,6 +13,7 @@ set(LIGHTWM_PROTOCOL_XMLS
     "${WAYLAND_PROTOCOLS_DIR}/stable/viewporter/viewporter.xml"
     "${WAYLAND_PROTOCOLS_DIR}/stable/xdg-shell/xdg-shell.xml"
     "${CMAKE_CURRENT_SOURCE_DIR}/wlr-output-management-unstable-v1.xml"
+    "${CMAKE_CURRENT_SOURCE_DIR}/wlr-screencopy-unstable-v1.xml"
 )
 
 set(GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")

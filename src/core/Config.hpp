@@ -1,10 +1,18 @@
 #pragma once
 
+#include <QList>
 #include <QMap>
 #include <QString>
 #include <QStringList>
 
 namespace lightwm {
+
+struct ShortcutEntry {
+    QString action;  // e.g. "spawn_terminal", "close_focused", ..., "custom"
+    QString mods;    // e.g. "Super", "Super+Shift", "Ctrl+Alt", ""
+    QString key;     // XKB keysym name, e.g. "q", "Return", "Print"
+    QString command; // shell command when action == "custom"
+};
 
 struct ConfigData {
     // Appearance & theming
@@ -18,6 +26,9 @@ struct ConfigData {
     int barHeight = 36;
     QString wallpaperPath;
     QString wallpaperMode = QStringLiteral("fill"); // "fill", "fit", "stretch", "center"
+    bool blurEnabled = true;
+    int blurStrength = 48;     // 0..64 (MultiEffect.blurMax)
+    double glassOpacity = 0.72; // 0.35..0.95
 
     // Workspaces & tiling
     int workspaceCount = 9;
@@ -32,6 +43,11 @@ struct ConfigData {
 
     // Applications
     QString terminal = QStringLiteral("foot");
+
+    // Shortcuts
+    QList<ShortcutEntry> shortcuts;
+
+    static QList<ShortcutEntry> defaultShortcuts();
 
     // Displays (per-output fractional scale, keyed by output name e.g. "eDP-1")
     QMap<QString, double> outputScales;
