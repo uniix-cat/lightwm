@@ -7,6 +7,14 @@ import "../components"
 Window {
     id: root
     property string query: ""
+    readonly property var results: Launcher.search(query)
+
+    function launchIndex(idx) {
+        if (idx >= 0 && idx < results.length) {
+            Launcher.launch(results[idx].exec)
+            root.visible = false
+        }
+    }
 
     visible: false
     width: 520
@@ -22,7 +30,16 @@ Window {
         if (visible) {
             query = ""
             searchField.text = ""
+            appList.currentIndex = results.length > 0 ? 0 : -1
+            appList.positionViewAtBeginning()
             searchField.forceActiveFocus()
+        }
+    }
+
+    onResultsChanged: {
+        appList.currentIndex = results.length > 0 ? 0 : -1
+        if (results.length > 0) {
+            appList.positionViewAtBeginning()
         }
     }
 
@@ -47,12 +64,25 @@ Window {
                 color: Theme.textPrimary
                 onTextChanged: root.query = text
                 Keys.onEscapePressed: root.visible = false
-                onAccepted: {
-                    const list = Launcher.search(root.query)
-                    if (list.length > 0) {
-                        Launcher.launch(list[0].exec)
-                        root.visible = false
+                Keys.onDownPressed: (event) => {
+                    if (appList.count > 0) {
+                        appList.incrementCurrentIndex()
+                        appList.positionViewAtIndex(appList.currentIndex, ListView.Contain)
                     }
+                    event.accepted = true
+                }
+                Keys.onUpPressed: (event) => {
+                    if (appList.count > 0) {
+                        appList.decrementCurrentIndex()
+                        appList.positionViewAtIndex(appList.currentIndex, ListView.Contain)
+                    }
+                    event.accepted = true
+                }
+                onAccepted: {
+                    const idx = (appList.currentIndex >= 0 && appList.currentIndex < root.results.length)
+                        ? appList.currentIndex
+                        : 0
+                    root.launchIndex(idx)
                 }
 
                 background: Rectangle {
@@ -64,17 +94,24 @@ Window {
             }
 
             ListView {
+                id: appList
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 clip: true
                 spacing: 6
-                model: Launcher.search(root.query)
+                keyNavigationWraps: true
+                currentIndex: root.results.length > 0 ? 0 : -1
+                model: root.results
                 delegate: Rectangle {
+                    required property int index
                     required property var modelData
+                    readonly property bool isSelected: ListView.isCurrentItem || ma.containsMouse
                     width: ListView.view.width
                     height: 46
                     radius: Theme.radius - 2
-                    color: ma.containsMouse ? Theme.accent : Theme.surface
+                    color: isSelected ? Theme.accent : Theme.surface
+                    border.width: ListView.isCurrentItem ? 1 : 0
+                    border.color: Theme.accentStrong
 
                     ColumnLayout {
                         anchors.fill: parent
@@ -89,7 +126,7 @@ Window {
                             font.family: Theme.fontFamily
                             font.pixelSize: 13
                             font.bold: true
-                            color: ma.containsMouse ? Theme.textOnAccent : Theme.textPrimary
+                            color: isSelected ? Theme.textOnAccent : Theme.textPrimary
                             elide: Text.ElideRight
                             Layout.fillWidth: true
                         }
@@ -98,7 +135,7 @@ Window {
                             visible: text.length > 0
                             font.family: Theme.fontFamily
                             font.pixelSize: 11
-                            color: ma.containsMouse ? Theme.textOnAccent : Theme.textSecondary
+                            color: isSelected ? Theme.textOnAccent : Theme.textSecondary
                             elide: Text.ElideRight
                             Layout.fillWidth: true
                         }
@@ -109,10 +146,7 @@ Window {
                         anchors.fill: parent
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            Launcher.launch(modelData.exec)
-                            root.visible = false
-                        }
+                        onClicked: root.launchIndex(index)
                     }
                 }
             }
