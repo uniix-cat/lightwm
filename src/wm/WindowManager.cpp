@@ -1,4 +1,5 @@
 #include "wm/WindowManager.hpp"
+#include "core/ToolkitTheme.hpp"
 
 #include "fractional-scale-v1-client-protocol.h"
 #include "river-input-management-v1-client-protocol.h"
@@ -659,6 +660,7 @@ WindowManager::~WindowManager() {
 
 bool WindowManager::init(const std::string& ipcSocketPath) {
     m_config = ConfigStore::load();
+    ToolkitTheme::apply(m_config);
     m_palette = paletteForName(m_config.themeName);
     m_xkbCtx = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
     m_outputScaleMgr = std::make_unique<OutputScaleManager>([this]() {
@@ -1142,6 +1144,17 @@ void WindowManager::onManageStart() {
             seat->pendingEndOp = false;
             seat->opWindowId = 0;
         }
+        const std::string wantCursor = m_config.cursorTheme.toStdString();
+        if (!wantCursor.empty() &&
+            (seat->cursorTheme != wantCursor || seat->cursorSize != m_config.cursorSize) &&
+            river_seat_v1_get_version(seat->wl) >= 2) {
+            river_seat_v1_set_xcursor_theme(
+                seat->wl,
+                wantCursor.c_str(),
+                static_cast<uint32_t>(std::clamp(m_config.cursorSize, 16, 64)));
+            seat->cursorTheme = wantCursor;
+            seat->cursorSize = m_config.cursorSize;
+        }
     }
 
     if (!m_outputs.empty() && m_outputs.front()->layerOutput) {
@@ -1606,6 +1619,7 @@ void WindowManager::onActionIpcCommand(const QJsonObject& cmd) {
 
 void WindowManager::reloadConfig() {
     m_config = ConfigStore::load();
+    ToolkitTheme::applyToProcessEnvironment(m_config);
     m_palette = paletteForName(m_config.themeName);
     m_corners.rebuild(m_config.cornerRadius, m_config.borderWidth, m_palette);
     if (m_outputScaleMgr) {

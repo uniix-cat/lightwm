@@ -132,6 +132,8 @@ struct SeatState {
     std::vector<river_pointer_binding_v1*> pointerBindings;
     bool bindingsCreated = false;
     bool bindingsDirty = true;
+    std::string cursorTheme;
+    int cursorSize = 0;
 };
 
 struct XkbKeyboardState {

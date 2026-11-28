@@ -26,7 +26,7 @@ ApplicationWindow {
     palette.mid: Theme.borderInactive
 
     property int currentTab: 0
-    readonly property var tabs: ["Appearance", "Tiling & Gaps", "Input", "Displays", "Shortcuts"]
+    readonly property var tabs: ["Appearance", "Qt & GTK", "Tiling & Gaps", "Input", "Displays", "Shortcuts"]
 
     RowLayout {
         anchors.fill: parent
@@ -250,7 +250,225 @@ ApplicationWindow {
                     Item { Layout.fillHeight: true }
                 }
 
-                // 1: Tiling & Gaps
+                // 1: Qt & GTK Toolkit Themes
+                ScrollView {
+                    id: toolkitScroll
+                    clip: true
+
+                    ColumnLayout {
+                        width: toolkitScroll.availableWidth
+                        spacing: 14
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Text {
+                                text: "Qt & GTK Themes"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 18
+                                font.bold: true
+                                color: Theme.textPrimary
+                                Layout.fillWidth: true
+                            }
+                            Button {
+                                text: "Refresh Lists"
+                                onClicked: Settings.refreshToolkitThemes()
+                            }
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 12
+                            Text {
+                                text: "Color Scheme:"
+                                font.family: Theme.fontFamily
+                                color: Theme.textPrimary
+                                Layout.preferredWidth: 150
+                            }
+                            Repeater {
+                                model: [
+                                    { id: "prefer-dark", label: "Prefer Dark" },
+                                    { id: "prefer-light", label: "Prefer Light" },
+                                    { id: "default", label: "Default" }
+                                ]
+                                delegate: Rectangle {
+                                    required property var modelData
+                                    readonly property bool isCurrent: Settings.colorScheme === modelData.id
+                                    width: schemeText.implicitWidth + 20
+                                    height: 30
+                                    radius: Theme.radius - 3
+                                    color: isCurrent ? Theme.accent : Theme.surfaceElevated
+                                    border.width: 1
+                                    border.color: isCurrent ? Theme.accentStrong : Theme.borderInactive
+
+                                    Text {
+                                        id: schemeText
+                                        anchors.centerIn: parent
+                                        text: modelData.label
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: 12
+                                        font.weight: isCurrent ? Font.DemiBold : Font.Normal
+                                        color: isCurrent ? Theme.textOnAccent : Theme.textPrimary
+                                    }
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: Settings.colorScheme = modelData.id
+                                    }
+                                }
+                            }
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 12
+                            Text {
+                                text: "GTK Theme:"
+                                font.family: Theme.fontFamily
+                                color: Theme.textPrimary
+                                Layout.preferredWidth: 150
+                            }
+                            ComboBox {
+                                Layout.fillWidth: true
+                                model: Settings.availableGtkThemes
+                                currentIndex: Math.max(0, model.indexOf(Settings.gtkTheme))
+                                enabled: model.length > 0
+                                onActivated: Settings.gtkTheme = currentText
+                            }
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 12
+                            Text {
+                                text: "Qt Platform Theme:"
+                                font.family: Theme.fontFamily
+                                color: Theme.textPrimary
+                                Layout.preferredWidth: 150
+                            }
+                            ComboBox {
+                                Layout.fillWidth: true
+                                model: Settings.availableQtPlatformThemes
+                                currentIndex: Math.max(0, model.indexOf(Settings.qtPlatformTheme))
+                                onActivated: Settings.qtPlatformTheme = currentText
+                            }
+                        }
+
+                        Text {
+                            text: "Resolved Qt backend: " + (Settings.resolvedQtPlatformTheme.length > 0 ? Settings.resolvedQtPlatformTheme : "none")
+                                  + "  (auto follows GTK3 theme/dark mode, or choose qt6ct / kde)"
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 11
+                            color: Theme.textSecondary
+                            wrapMode: Text.WordWrap
+                            Layout.fillWidth: true
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 12
+                            Text {
+                                text: "Qt Widget Style:"
+                                font.family: Theme.fontFamily
+                                color: Theme.textPrimary
+                                Layout.preferredWidth: 150
+                            }
+                            ComboBox {
+                                Layout.fillWidth: true
+                                model: Settings.availableQtStyles
+                                displayText: (currentIndex >= 0 && model[currentIndex].length > 0)
+                                    ? model[currentIndex]
+                                    : "(Platform Default)"
+                                currentIndex: Math.max(0, model.indexOf(Settings.qtStyle))
+                                delegate: ItemDelegate {
+                                    required property var modelData
+                                    required property int index
+                                    width: ListView.view.width
+                                    text: modelData.length > 0 ? modelData : "(Platform Default)"
+                                    highlighted: ListView.isCurrentItem
+                                }
+                                onActivated: (idx) => Settings.qtStyle = model[idx]
+                            }
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 12
+                            Text {
+                                text: "Icon Theme:"
+                                font.family: Theme.fontFamily
+                                color: Theme.textPrimary
+                                Layout.preferredWidth: 150
+                            }
+                            ComboBox {
+                                Layout.fillWidth: true
+                                model: Settings.availableIconThemes
+                                currentIndex: Math.max(0, model.indexOf(Settings.iconTheme))
+                                enabled: model.length > 0
+                                onActivated: Settings.iconTheme = currentText
+                            }
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 12
+                            Text {
+                                text: "Cursor Theme:"
+                                font.family: Theme.fontFamily
+                                color: Theme.textPrimary
+                                Layout.preferredWidth: 150
+                            }
+                            ComboBox {
+                                Layout.fillWidth: true
+                                model: Settings.availableCursorThemes
+                                currentIndex: Math.max(0, model.indexOf(Settings.cursorTheme))
+                                enabled: model.length > 0
+                                onActivated: Settings.cursorTheme = currentText
+                            }
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 12
+                            Text {
+                                text: "Cursor Size: " + Settings.cursorSize + " px"
+                                font.family: Theme.fontFamily
+                                color: Theme.textPrimary
+                                Layout.preferredWidth: 150
+                            }
+                            Slider {
+                                id: cursorSlider
+                                Layout.fillWidth: true
+                                from: 16
+                                to: 48
+                                stepSize: 2
+                                value: Settings.cursorSize
+                                onMoved: {
+                                    if (!pressed) {
+                                        Settings.cursorSize = Math.round(value)
+                                    }
+                                }
+                                onPressedChanged: {
+                                    if (!pressed) {
+                                        Settings.cursorSize = Math.round(value)
+                                    }
+                                }
+                            }
+                        }
+
+                        Text {
+                            text: "GTK3/GTK4 themes, icons and color scheme apply live via gsettings & settings.ini. Newly launched Qt apps use QT_QPA_PLATFORMTHEME and QT_STYLE_OVERRIDE immediately."
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 11
+                            color: Theme.textSecondary
+                            wrapMode: Text.WordWrap
+                            Layout.fillWidth: true
+                            Layout.topMargin: 4
+                        }
+                    }
+                }
+
+                // 2: Tiling & Gaps
                 ColumnLayout {
                     spacing: 14
                     Text {

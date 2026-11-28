@@ -1,5 +1,6 @@
 #include "settings/SettingsBackend.hpp"
 #include "core/IpcProtocol.hpp"
+#include "core/ToolkitTheme.hpp"
 
 #include <QGuiApplication>
 #include <QJsonArray>
@@ -14,6 +15,8 @@ namespace lightwm::settings {
 
 SettingsBackend::SettingsBackend(QObject* parent) : QObject(parent) {
     m_cfg = ConfigStore::load();
+    ToolkitTheme::populateSystemDefaults(m_cfg);
+    refreshToolkitThemes();
 
     connect(qGuiApp, &QGuiApplication::screenAdded, this, &SettingsBackend::displaysChanged);
     connect(qGuiApp, &QGuiApplication::screenRemoved, this, &SettingsBackend::displaysChanged);
@@ -92,6 +95,24 @@ void SettingsBackend::applyAndSave() {
     ConfigStore::save(m_cfg);
     notifyWmReload();
     emit changed();
+}
+
+void SettingsBackend::applyToolkitAndSave() {
+    ToolkitTheme::apply(m_cfg);
+    applyAndSave();
+}
+
+QString SettingsBackend::resolvedQtPlatformTheme() const {
+    return ToolkitTheme::resolvedQtPlatformTheme(m_cfg);
+}
+
+void SettingsBackend::refreshToolkitThemes() {
+    m_gtkThemes = ToolkitTheme::availableGtkThemes();
+    m_iconThemes = ToolkitTheme::availableIconThemes();
+    m_cursorThemes = ToolkitTheme::availableCursorThemes();
+    m_qtStyles = QStringList{QString()} + ToolkitTheme::availableQtStyles();
+    m_qtPlatformThemes = ToolkitTheme::availableQtPlatformThemes();
+    emit toolkitListsChanged();
 }
 
 void SettingsBackend::notifyWmReload() {

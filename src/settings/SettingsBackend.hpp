@@ -3,6 +3,7 @@
 #include "core/Config.hpp"
 #include <QLocalSocket>
 #include <QObject>
+#include <QStringList>
 #include <QTimer>
 #include <QUrl>
 #include <QVariantList>
@@ -25,6 +26,19 @@ class SettingsBackend : public QObject {
     Q_PROPERTY(QString terminal READ terminal WRITE setTerminal NOTIFY changed)
     Q_PROPERTY(QString wallpaperPath READ wallpaperPath WRITE setWallpaperPath NOTIFY changed)
     Q_PROPERTY(QString wallpaperMode READ wallpaperMode WRITE setWallpaperMode NOTIFY changed)
+    Q_PROPERTY(QString colorScheme READ colorScheme WRITE setColorScheme NOTIFY changed)
+    Q_PROPERTY(QString gtkTheme READ gtkTheme WRITE setGtkTheme NOTIFY changed)
+    Q_PROPERTY(QString iconTheme READ iconTheme WRITE setIconTheme NOTIFY changed)
+    Q_PROPERTY(QString cursorTheme READ cursorTheme WRITE setCursorTheme NOTIFY changed)
+    Q_PROPERTY(int cursorSize READ cursorSize WRITE setCursorSize NOTIFY changed)
+    Q_PROPERTY(QString qtPlatformTheme READ qtPlatformTheme WRITE setQtPlatformTheme NOTIFY changed)
+    Q_PROPERTY(QString qtStyle READ qtStyle WRITE setQtStyle NOTIFY changed)
+    Q_PROPERTY(QString resolvedQtPlatformTheme READ resolvedQtPlatformTheme NOTIFY changed)
+    Q_PROPERTY(QStringList availableGtkThemes READ availableGtkThemes NOTIFY toolkitListsChanged)
+    Q_PROPERTY(QStringList availableIconThemes READ availableIconThemes NOTIFY toolkitListsChanged)
+    Q_PROPERTY(QStringList availableCursorThemes READ availableCursorThemes NOTIFY toolkitListsChanged)
+    Q_PROPERTY(QStringList availableQtStyles READ availableQtStyles NOTIFY toolkitListsChanged)
+    Q_PROPERTY(QStringList availableQtPlatformThemes READ availableQtPlatformThemes NOTIFY toolkitListsChanged)
     Q_PROPERTY(QVariantList displays READ displays NOTIFY displaysChanged)
 
 public:
@@ -72,6 +86,35 @@ public:
     QString wallpaperMode() const { return m_cfg.wallpaperMode; }
     void setWallpaperMode(const QString& v) { m_cfg.wallpaperMode = v; applyAndSave(); }
 
+    QString colorScheme() const { return m_cfg.colorScheme; }
+    void setColorScheme(const QString& v) { m_cfg.colorScheme = v; applyToolkitAndSave(); }
+
+    QString gtkTheme() const { return m_cfg.gtkTheme; }
+    void setGtkTheme(const QString& v) { m_cfg.gtkTheme = v; applyToolkitAndSave(); }
+
+    QString iconTheme() const { return m_cfg.iconTheme; }
+    void setIconTheme(const QString& v) { m_cfg.iconTheme = v; applyToolkitAndSave(); }
+
+    QString cursorTheme() const { return m_cfg.cursorTheme; }
+    void setCursorTheme(const QString& v) { m_cfg.cursorTheme = v; applyToolkitAndSave(); }
+
+    int cursorSize() const { return m_cfg.cursorSize; }
+    void setCursorSize(int v) { m_cfg.cursorSize = qBound(16, v, 64); applyToolkitAndSave(); }
+
+    QString qtPlatformTheme() const { return m_cfg.qtPlatformTheme; }
+    void setQtPlatformTheme(const QString& v) { m_cfg.qtPlatformTheme = v; applyToolkitAndSave(); }
+
+    QString qtStyle() const { return m_cfg.qtStyle; }
+    void setQtStyle(const QString& v) { m_cfg.qtStyle = v; applyToolkitAndSave(); }
+
+    QString resolvedQtPlatformTheme() const;
+    QStringList availableGtkThemes() const { return m_gtkThemes; }
+    QStringList availableIconThemes() const { return m_iconThemes; }
+    QStringList availableCursorThemes() const { return m_cursorThemes; }
+    QStringList availableQtStyles() const { return m_qtStyles; }
+    QStringList availableQtPlatformThemes() const { return m_qtPlatformThemes; }
+
+    Q_INVOKABLE void refreshToolkitThemes();
     Q_INVOKABLE void setWallpaperFromUrl(const QUrl& url);
     Q_INVOKABLE void setOutputScale(const QString& outputName, double scale);
 
@@ -80,6 +123,7 @@ public:
 signals:
     void changed();
     void displaysChanged();
+    void toolkitListsChanged();
 
 private slots:
     void tryConnectIpc();
@@ -87,9 +131,15 @@ private slots:
 
 private:
     void applyAndSave();
+    void applyToolkitAndSave();
     void notifyWmReload();
 
     ConfigData m_cfg;
+    QStringList m_gtkThemes;
+    QStringList m_iconThemes;
+    QStringList m_cursorThemes;
+    QStringList m_qtStyles;
+    QStringList m_qtPlatformThemes;
     QLocalSocket m_ipcSocket;
     QTimer m_reconnectTimer;
     QByteArray m_ipcBuffer;

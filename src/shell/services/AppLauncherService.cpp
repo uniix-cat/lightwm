@@ -1,4 +1,6 @@
 #include "shell/services/AppLauncherService.hpp"
+#include "core/Config.hpp"
+#include "core/ToolkitTheme.hpp"
 
 #include <QDir>
 #include <QFile>
@@ -109,7 +111,11 @@ void AppLauncherService::launch(const QString& execLine) {
     QStringList parts = QProcess::splitCommand(execLine);
     if (parts.isEmpty()) return;
     const QString program = parts.takeFirst();
-    QProcess::startDetached(program, parts);
+    QProcess proc;
+    proc.setProgram(program);
+    proc.setArguments(parts);
+    proc.setProcessEnvironment(ToolkitTheme::childProcessEnvironment(ConfigStore::load()));
+    proc.startDetached();
 }
 
 } // namespace lightwm::shell

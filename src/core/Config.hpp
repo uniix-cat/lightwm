@@ -35,6 +35,15 @@ struct ConfigData {
 
     // Displays (per-output fractional scale, keyed by output name e.g. "eDP-1")
     QMap<QString, double> outputScales;
+
+    // Qt & GTK toolkit theming
+    QString colorScheme = QStringLiteral("prefer-dark"); // "prefer-dark", "prefer-light", "default"
+    QString gtkTheme;
+    QString iconTheme;
+    QString cursorTheme;
+    int cursorSize = 24;
+    QString qtPlatformTheme = QStringLiteral("auto"); // "auto", "gtk3", "qt6ct", "kde", "xdgdesktopportal"
+    QString qtStyle;                                  // empty = platform default, or "Fusion", "Breeze", etc.
 };
 
 class ConfigStore {

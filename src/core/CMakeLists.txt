@@ -3,6 +3,8 @@ add_library(lightwm_core STATIC
     Config.cpp
     Theme.hpp
     Theme.cpp
+    ToolkitTheme.hpp
+    ToolkitTheme.cpp
     IpcProtocol.hpp
 )
 

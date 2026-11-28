@@ -64,6 +64,17 @@ ConfigData ConfigStore::load() {
             }
         }
     }
+
+    const QString defaultScheme = (cfg.themeName == QStringLiteral("cream"))
+        ? QStringLiteral("prefer-light")
+        : QStringLiteral("prefer-dark");
+    cfg.colorScheme = root.value(QStringLiteral("colorScheme")).toString(defaultScheme);
+    cfg.gtkTheme = root.value(QStringLiteral("gtkTheme")).toString();
+    cfg.iconTheme = root.value(QStringLiteral("iconTheme")).toString();
+    cfg.cursorTheme = root.value(QStringLiteral("cursorTheme")).toString();
+    cfg.cursorSize = qBound(16, root.value(QStringLiteral("cursorSize")).toInt(cfg.cursorSize), 64);
+    cfg.qtPlatformTheme = root.value(QStringLiteral("qtPlatformTheme")).toString(cfg.qtPlatformTheme);
+    cfg.qtStyle = root.value(QStringLiteral("qtStyle")).toString();
     return cfg;
 }
 
@@ -101,6 +112,14 @@ bool ConfigStore::save(const ConfigData& cfg) {
         }
     }
     root.insert(QStringLiteral("outputScales"), scalesObj);
+
+    root.insert(QStringLiteral("colorScheme"), cfg.colorScheme);
+    root.insert(QStringLiteral("gtkTheme"), cfg.gtkTheme);
+    root.insert(QStringLiteral("iconTheme"), cfg.iconTheme);
+    root.insert(QStringLiteral("cursorTheme"), cfg.cursorTheme);
+    root.insert(QStringLiteral("cursorSize"), cfg.cursorSize);
+    root.insert(QStringLiteral("qtPlatformTheme"), cfg.qtPlatformTheme);
+    root.insert(QStringLiteral("qtStyle"), cfg.qtStyle);
 
     QFile file(path);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
