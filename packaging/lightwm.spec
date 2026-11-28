@@ -4,7 +4,7 @@ Release:        1%{?dist}
 Summary:        Out-of-the-box Wayland desktop environment built on River and Qt6 Quick
 License:        GPL-3.0-or-later
 URL:            https://github.com/uniix-cat/lightwm
-Source0:        %{url}/archive/v%{version}/%{name}-%{version}.tar.gz
+Source0:        %{name}-%{version}.tar.gz
 
 BuildRequires:  cmake >= 3.24
 BuildRequires:  gcc-c++

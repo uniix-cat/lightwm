@@ -7,10 +7,11 @@ NAME := lightwm
 
 srpm:
 	@mkdir -p "$(outdir)"
-	@topdir=$$(mktemp -d); \
+	@set -e; \
+	topdir=$$(mktemp -d); \
 	trap 'rm -rf "$$topdir"' EXIT; \
 	mkdir -p "$$topdir/SOURCES" "$$topdir/SPECS" "$$topdir/SRPMS"; \
-	if [ -d .git ]; then \
+	if [ -d .git ] && command -v git >/dev/null 2>&1; then \
 		git archive --format=tar.gz --prefix=$(NAME)-$(VERSION)/ -o "$$topdir/SOURCES/$(NAME)-$(VERSION).tar.gz" HEAD; \
 	else \
 		tar --transform "s,^\.,$(NAME)-$(VERSION)," --exclude=.git --exclude=build -czf "$$topdir/SOURCES/$(NAME)-$(VERSION).tar.gz" .; \
